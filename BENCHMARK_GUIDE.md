@@ -100,18 +100,57 @@ The benchmarks calculate the following Information Retrieval metrics:
 * **Top-5 / Top-10 (%)**: Percentage of targets found in the top 5 or 10 ranks.
 * **DTW**: Average Dynamic Time Warping distance between pitch contours.
 
----
+## 5. Environment Setup & Installation
 
-## 5. Setup & Optional Packages
+Follow these steps to set up a clean Python environment and install all dependencies:
 
-Ensure you have installed all required libraries. To install the complete stack including deep learning modules and Optuna, run:
+### A. System Prerequisites
+The audio loading engines (`librosa`, `soundfile`) require **FFmpeg** to decode formats like `.mp3` and `.wav`.
+* **macOS**: `brew install ffmpeg`
+* **Linux (Ubuntu/Debian)**: `sudo apt update && sudo apt install ffmpeg`
+* **Windows**: Download and add the FFmpeg binary path to your system's `PATH`.
+
+### B. Create and Activate the Virtual Environment
+Create a virtual environment named `.venv` using Python 3.10 or higher:
 ```bash
-pip install -e .[advanced,optuna]
+# Create the environment
+python3 -m venv .venv
+
+# Activate on macOS/Linux
+source .venv/bin/activate
+
+# Activate on Windows (Command Prompt)
+.venv\Scripts\activate.bat
+
+# Activate on Windows (PowerShell)
+.venv\Scripts\Activate.ps1
 ```
 
+### C. Install Dependencies
+You can choose the installation configuration that fits your usage:
+
+* **Basic installation** (Only basic DSP extractors like `pyin` or `yin`):
+  ```bash
+  pip install -e .
+  ```
+* **Developer/Test tools installation** (Includes testing libraries like `pytest`):
+  ```bash
+  pip install -e .[dev]
+  ```
+* **Advanced/Deep Learning installation** (Includes heavy neural extractors like BS-Roformer, Demucs, basic-pitch, and PyTorch):
+  ```bash
+  pip install -e .[advanced]
+  ```
+* **Full installation** (Recommended for the complete benchmark suite, including hyperparameter tuning):
+  ```bash
+  pip install -e .[advanced,optuna]
+  ```
+
+---
+
 ### Supported Extraction Methods
-* **Basic Pitch**: Spotify's lightweight polyphonic transcription.
+* **Basic Pitch**: Spotify's lightweight polyphonic transcription model.
 * **BS-Roformer + RMVPE**: High-fidelity vocal extraction combined with robust CNN-based pitch estimation (Apple Silicon MPS / Nvidia CUDA accelerated).
 * **Demucs + CREPE**: Traditional hybrid source separation and deep F0 tracking.
-* **Melodia**: Melodic salience algorithm.
+* **Melodia**: Melodic salience algorithm (requires `essentia` package).
 * **pYIN / YIN**: Classic DSP pitch tracking.
