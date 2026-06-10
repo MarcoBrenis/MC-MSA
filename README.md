@@ -1,15 +1,15 @@
-# MC-FSA
+# MC-MSA
 
-Herramienta experimental para segmentar y clasificar la estructura melódica de una grabación.
-El flujo está inspirado en MSAF pero se centra en la melodía: extrae el contorno
-(pitch y energía), detecta cambios estructurales y etiqueta cada frase con roles
-musicales sencillos como "exposición", "pregunta" o "respuesta".
+An experimental tool to segment and classify the melodic structure of an audio recording.
+The workflow is inspired by MSAF but focuses on melody: it extracts the contour
+(pitch and energy), detects structural changes, and labels each phrase with simple
+musical roles such as "exposition", "question", or "answer".
 
-El detector de secciones combina dos pistas de cambio: una curva de novedad
-derivada (saltos en pitch/energía) y una matriz de autosimilitud con núcleo
-"checkerboard" para resaltar repeticiones y contrastes entre fragmentos.
+The section detector combines two change cues: a derived novelty curve
+(pitch/energy jumps) and a self-similarity matrix with a checkerboard kernel
+to highlight repetitions and contrasts between fragments.
 
-## Instalación
+## Installation
 
 ```bash
 python -m venv .venv
@@ -17,33 +17,33 @@ source .venv/bin/activate
 pip install -e .[dev]
 ```
 
-## Uso
+## Usage
 
-Desde la línea de comandos:
-
-```bash
-python -m melody_analysis ruta/al/audio.wav \
-    --output resultado.json \
-    --melody-plot contorno.png \
-    --sections-plot secciones.png
-```
-
-Los parámetros `--melody-plot` y `--sections-plot` guardan dos imágenes:
-una con el contorno melódico extraído y otra con el espectrograma mel donde
-se resaltan las secciones descritas en el JSON.
-
-Si quieres experimentar con una copia independiente del pipeline sin tocar la
-implementación original, hay un clon disponible bajo el nombre
-`melody_analysis_v2` con los mismos puntos de entrada:
+From the command line:
 
 ```bash
-python -m melody_analysis_v2 ruta/al/audio.wav \
-    --output resultado.json \
-    --melody-plot contorno_v2.png \
-    --sections-plot secciones_v2.png
+python -m melody_analysis path/to/audio.wav \
+    --output result.json \
+    --melody-plot contour.png \
+    --sections-plot sections.png
 ```
 
-En código:
+The `--melody-plot` and `--sections-plot` parameters save two images:
+one with the extracted melodic contour and another with the mel spectrogram where
+the sections described in the JSON are highlighted.
+
+If you want to experiment with an independent copy of the pipeline without modifying the
+original implementation, a clone is available under the name
+`melody_analysis_v2` with the same entry points:
+
+```bash
+python -m melody_analysis_v2 path/to/audio.wav \
+    --output result.json \
+    --melody-plot contour_v2.png \
+    --sections-plot sections_v2.png
+```
+
+In code:
 
 ```python
 from melody_analysis import (
@@ -58,40 +58,40 @@ from melody_analysis import (
 import librosa
 
 analyzer = MelodyAnalyzer()
-resultado = analyzer.analyze_file("ruta/al/audio.wav")
-for segmento in resultado.segments:
-    print(segmento.label, segmento.segment.start_time, segmento.segment.end_time)
+result = analyzer.analyze_file("path/to/audio.wav")
+for segment in result.segments:
+    print(segment.label, segment.segment.start_time, segment.segment.end_time)
 
-# Generar visualizaciones directamente desde Python
-fig1 = plot_melody_contour(resultado)
-audio, sample_rate = librosa.load("ruta/al/audio.wav", sr=22050)
-fig2 = plot_spectrogram_with_segments(audio, sample_rate, resultado)
-# Si solo quieres el contorno melódico sin energía o f0:
-fig_melodia = plot_melody_only(resultado)
-# Si quieres únicamente la curva de f0 en Hz:
-fig_f0 = plot_f0_only(resultado)
-# Si prefieres f0 sin ninguna superposición de segmentos:
-fig_f0_plano = plot_f0_no_segments(resultado)
-# Señal normalizada + curvas de novedad (usa analyze_file/analyze_audio)
-fig_novedad = plot_signal_and_novelty(resultado)
-# Matriz de autosimilitud (pitch + energía)
-fig_ssm = plot_self_similarity(resultado)
-# Las gráficas incluyen el contorno en MIDI y la curva f0 (Hz) superpuesta cuando aplica.
+# Generate visualizations directly from Python
+fig1 = plot_melody_contour(result)
+audio, sample_rate = librosa.load("path/to/audio.wav", sr=22050)
+fig2 = plot_spectrogram_with_segments(audio, sample_rate, result)
+# If you only want the melodic contour without energy or f0:
+fig_melody = plot_melody_only(result)
+# If you only want the f0 curve in Hz:
+fig_f0 = plot_f0_only(result)
+# If you prefer f0 without any segment overlay:
+fig_f0_flat = plot_f0_no_segments(result)
+# Normalized signal + novelty curves (uses analyze_file/analyze_audio)
+fig_novelty = plot_signal_and_novelty(result)
+# Self-similarity matrix (pitch + energy)
+fig_ssm = plot_self_similarity(result)
+# Plots include the contour in MIDI and the f0 curve (Hz) overlaid when applicable.
 
-# ¿Quieres renombrar las etiquetas (ej. "pregunta"→"Q" y "respuesta"→"A")?
-# Solo cambia la línea donde se crea el analizador y pasa alias al clasificador;
-# no hace falta tocar nada más y los colores/leyendas se conservan.
+# Do you want to rename the labels (e.g. "pregunta" -> "Q" and "respuesta" -> "A")?
+# Just change the line where the analyzer is created and pass aliases to the classifier;
+# no need to modify anything else, and colors/legends are preserved.
 analyzer_custom = MelodyAnalyzer(
     classifier=MelodyClassifier(label_aliases={"pregunta": "Q", "respuesta": "A"})
 )
-resultado_custom = analyzer_custom.analyze_file("ruta/al/audio.wav")
+result_custom = analyzer_custom.analyze_file("path/to/audio.wav")
 ```
 
-Si quieres usar directamente el clon con los colores mejorados (`melody_analysis_v2`)
-desde un script como el que muestras (`from src.melody_analysis_v2 import ...`),
-asegúrate primero de haber instalado el proyecto en editable (`pip install -e .`)
-o de exportar `PYTHONPATH=src` antes de ejecutar el script. Luego importa sin el
-prefijo `src` así:
+If you want to directly use the clone with improved colors (`melody_analysis_v2`)
+from a script like the one shown (`from src.melody_analysis_v2 import ...`),
+make sure first to have installed the project in editable mode (`pip install -e .`)
+or export `PYTHONPATH=src` before running the script. Then import without the
+`src` prefix like this:
 
 ```python
 from melody_analysis_v2 import (
@@ -106,121 +106,113 @@ from melody_analysis_v2 import (
 import librosa
 
 analyzer = MelodyAnalyzer()
-resultado = analyzer.analyze_file("1.mp3")
-for segmento in resultado.segments:
-    print(segmento.label, segmento.segment.start_time, segmento.segment.end_time)
+result = analyzer.analyze_file("1.mp3")
+for segment in result.segments:
+    print(segment.label, segment.segment.start_time, segment.segment.end_time)
 
-# Para renombrar etiquetas en este mismo ejemplo, cambia la línea anterior por:
+# To rename labels in this same example, change the line above to:
 # analyzer = MelodyAnalyzer(
 #     classifier=MelodyClassifier(label_aliases={"pregunta": "Q", "respuesta": "A"})
 # )
 
-fig1 = plot_melody_contour(resultado)
+fig1 = plot_melody_contour(result)
 audio, sample_rate = librosa.load("1.mp3", sr=22050)
-fig2 = plot_spectrogram_with_segments(audio, sample_rate, resultado)
-# Visualización minimalista solo del pitch en MIDI
-fig_melodia = plot_melody_only(resultado)
-# Visualización minimalista solo de f0 en Hz
-fig_f0 = plot_f0_only(resultado)
-# Visualización de f0 sin tramas de segmentos
-fig_f0_plano = plot_f0_no_segments(resultado)
+fig2 = plot_spectrogram_with_segments(audio, sample_rate, result)
+# Minimalist visualization of pitch in MIDI only
+fig_melody = plot_melody_only(result)
+# Minimalist visualization of f0 in Hz only
+fig_f0 = plot_f0_only(result)
+# Visualization of f0 without segment overlays
+fig_f0_flat = plot_f0_no_segments(result)
 ```
 
-### Guía rápida para renombrar etiquetas a Q/A (o cualquier alias)
+### Quick Guide to Rename Labels to Q/A (or any alias)
 
-1. **Vía código (v1 o v2):** al crear el analizador, pasa `label_aliases` al
-   clasificador. Solo necesitas modificar esa línea.
+1. **Via code (v1 or v2):** when creating the analyzer, pass `label_aliases` to the
+   classifier. You only need to modify that line.
 
    ```python
-   from melody_analysis import MelodyAnalyzer, MelodyClassifier  # o melody_analysis_v2
+   from melody_analysis import MelodyAnalyzer, MelodyClassifier  # or melody_analysis_v2
 
    analyzer = MelodyAnalyzer(
        classifier=MelodyClassifier(label_aliases={"pregunta": "Q", "respuesta": "A"})
    )
-   resultado = analyzer.analyze_file("ruta/al/audio.wav")
+   result = analyzer.analyze_file("path/to/audio.wav")
    ```
 
-2. **Usando el ejemplo `examples/visualizar_melodia_v2.py`:** cambia la línea
-   `analyzer = MelodyAnalyzer()` por la versión con alias anterior; no hay que
-   tocar nada más en el script.
+2. **Using the example `examples/visualizar_melodia_v2.py`:** change the line
+   `analyzer = MelodyAnalyzer()` to the aliased version above; no other changes
+   are needed in the script.
 
-   - Ubicación exacta: el bloque de creación del analizador está al inicio del
-     archivo. Sustituye la línea que crea el analizador por la línea comentada
+   - Exact location: the block for creating the analyzer is at the beginning of the
+     file. Replace the line that creates the analyzer with the commented version
      `# analyzer = MelodyAnalyzer(classifier=MelodyClassifier(label_aliases={"pregunta": "Q", "respuesta": "A"}))`.
-   - Si usas otro script, aplica la misma sustitución en la línea donde
-     construyes `MelodyAnalyzer` o pasas explícitamente un `MelodyClassifier`.
+   - If using another script, apply the same substitution on the line where you
+     construct `MelodyAnalyzer` or explicitly pass a `MelodyClassifier`.
 
-### Checklist rápido para usar el visualizador en tu propio script
+### Quick Checklist to Use the Visualizer in Your Own Script
 
-Si ya tienes un script parecido al ejemplo anterior y parece que "no hace
-nada", verifica estos puntos:
+If you already have a script similar to the previous example and it seems to "do
+nothing", check these points:
 
-1) Instala el proyecto en editable (`pip install -e .[dev]`) o exporta
-   `PYTHONPATH=src` en la misma sesión antes de ejecutarlo. Así las
-   importaciones `from melody_analysis_v2 import ...` funcionarán sin el
-   prefijo `src.`
-2) Llama a las funciones de visualización (`plot_melody_contour` y
-   `plot_spectrogram_with_segments`) igual que en el snippet y guarda o
-   muestra las figuras:
+1) Install the project in editable mode (`pip install -e .[dev]`) or export
+   `PYTHONPATH=src` in the same session before running it. This ensures the
+   imports `from melody_analysis_v2 import ...` work without the `src.` prefix.
+2) Call the visualization functions (`plot_melody_contour` and
+   `plot_spectrogram_with_segments`) just like in the snippet and save or
+   show the figures:
 
 ```python
-fig1 = plot_melody_contour(resultado)
-fig1.savefig("contorno.png", dpi=150)
+fig1 = plot_melody_contour(result)
+fig1.savefig("contour.png", dpi=150)
 audio, sample_rate = librosa.load("1.mp3", sr=22050)
-fig2 = plot_spectrogram_with_segments(audio, sample_rate, resultado)
-fig2.savefig("secciones.png", dpi=150)
+fig2 = plot_spectrogram_with_segments(audio, sample_rate, result)
+fig2.savefig("sections.png", dpi=150)
 ```
 
-3) Si quieres ver las ventanas interactivas, exporta un backend con soporte
-   gráfico, por ejemplo `MPLBACKEND=TkAgg`, o ejecuta el script en un entorno
-   que ya tenga backend interactivo. Si Matplotlib queda en modo `Agg`, las
-   figuras se guardarán en disco (como en el ejemplo anterior) y no se
-   abrirán ventanas.
+3) If you want to see interactive windows, export a backend with graphical support,
+   for example `MPLBACKEND=TkAgg`, or run the script in an environment that
+   already has an interactive backend. If Matplotlib remains in `Agg` mode, the
+   figures will be saved to disk (as in the previous example) and no windows will open.
 
-Siguiendo esos pasos, tu snippet estará usando el visualizador tal como en el
-clon `melody_analysis_v2` con colores para cada clasificación.
+Following these steps, your snippet will use the visualizer just like in the clone
+`melody_analysis_v2` with colors for each classification.
 
-Y de forma análoga puedes importar `MelodyAnalyzer` desde
-`melody_analysis_v2` para modificarlo libremente sin afectar al módulo
-original.
+Analogously, you can import `MelodyAnalyzer` from `melody_analysis_v2` to
+modify it freely without affecting the original module.
 
-### Ejemplo paso a paso con el clon `melody_analysis_v2`
+### Step-by-Step Example with the `melody_analysis_v2` Clone
 
-Si prefieres un script listo para ejecutar que explique línea a línea el
-flujo completo y genere las dos imágenes de soporte, revisa
-`examples/visualizar_melodia_v2.py`. El código contiene comentarios en
-español que describen cada instrucción, imprime por consola los segmentos
-detectados y guarda en `salidas_visualizacion/` tanto el contorno melódico
-como los dos espectrogramas (manual y segmentado).
+If you prefer a ready-to-run script that explains the entire flow line by line and
+generates both support images, check `examples/visualizar_melodia_v2.py`. The code
+contains comments in Spanish describing each instruction, prints the detected
+segments to the console, and saves both the melodic contour and the two spectrograms
+(manual and segmented) in `salidas_visualizacion/`.
 
-El script intenta usar un backend interactivo (TkAgg/QtAgg/MacOSX) si hay
-soporte gráfico disponible, de modo que también puedas ver las ventanas con
-`plt.show()`. Si Matplotlib continúa utilizando `Agg`, exporta la variable
-de entorno `MPLBACKEND` con el backend de tu preferencia (por ejemplo,
-`MPLBACKEND=TkAgg`) antes de ejecutar el script y asegúrate de tener las
-dependencias correspondientes instaladas.
+The script attempts to use an interactive backend (TkAgg/QtAgg/MacOSX) if graphical
+support is available, so you can also see the windows with `plt.show()`. If Matplotlib
+continues using `Agg`, export the `MPLBACKEND` environment variable with your
+preferred backend (for example, `MPLBACKEND=TkAgg`) before running the script and
+make sure you have the corresponding dependencies installed.
 
 ```bash
 python examples/visualizar_melodia_v2.py
 ```
 
-Solo necesitas sustituir la ruta `1.mp3` que aparece en el script por tu
-archivo de audio antes de ejecutarlo.
+You only need to replace the path `1.mp3` in the script with your audio file before running it.
 
-### Visualizaciones por etapa (v2)
+### Stage-by-Stage Visualizations (v2)
 
-Además de las vistas de contorno y espectrograma, el clon `melody_analysis_v2`
-expone helpers separados para ver cada fase del pipeline en imágenes
-independientes:
+In addition to the contour and spectrogram views, the `melody_analysis_v2` clone
+exposes separate helpers to view each phase of the pipeline in independent images:
 
-- `plot_self_similarity(resultado)`: matriz de autosimilitud.
-- `plot_boundary_detection(resultado)`: curvas de novedad (derivadas, SSM y
-  combinada) usadas para detectar fronteras.
-- `plot_segment_extraction(resultado)`: franjas de segmentos ya detectados
-  sobre una línea de tiempo.
-- `plot_descriptor_summary(resultado)`: barras por descriptor por segmento.
+- `plot_self_similarity(result)`: self-similarity matrix.
+- `plot_boundary_detection(result)`: novelty curves (derived, SSM, and combined)
+  used to detect boundaries.
+- `plot_segment_extraction(result)`: timelines of already detected segments.
+- `plot_descriptor_summary(result)`: bars per descriptor per segment.
 
-Ejemplo reducido:
+Reduced example:
 
 ```python
 from melody_analysis_v2 import (
@@ -231,55 +223,52 @@ from melody_analysis_v2 import (
     plot_descriptor_summary,
 )
 
-resultado = MelodyAnalyzer().analyze_file("1.mp3")
-plot_self_similarity(resultado).savefig("autosimilitud.png")
-plot_boundary_detection(resultado).savefig("boundary_detection.png")
-plot_segment_extraction(resultado).savefig("segment_extraction.png")
-plot_descriptor_summary(resultado).savefig("descriptor_summary.png")
+result = MelodyAnalyzer().analyze_file("1.mp3")
+plot_self_similarity(result).savefig("self_similarity.png")
+plot_boundary_detection(result).savefig("boundary_detection.png")
+plot_segment_extraction(result).savefig("segment_extraction.png")
+plot_descriptor_summary(result).savefig("descriptor_summary.png")
 ```
 
-## Diagrama de flujo del análisis
+## Analysis Flowchart
 
-El pipeline de `MelodyAnalyzer` (y su clon `melody_analysis_v2`) sigue estos
-pasos de izquierda a derecha:
+The `MelodyAnalyzer` pipeline (and its clone `melody_analysis_v2`) follows these
+steps from left to right:
 
 ```mermaid
 flowchart LR
-    A[Audio de entrada<br/>WAV/MP3] --> B[Extracción STFT<br/>+ espectrograma mel]
-    B --> C[Estimación de contorno<br/>f0 en MIDI y Hz]
-    C --> D[Suavizado y normalización<br/>pitch/energía]
-    D --> E[Curva de novedad
-             basada en derivadas]
-    D --> F[Matriz de autosimilitud
-             con núcleo checkerboard]
-    E --> G[Fusión de pistas de cambio<br/>novelty + autosimilitud]
+    A[Input Audio<br/>WAV/MP3] --> B[STFT Extraction<br/>+ Mel Spectrogram]
+    B --> C[Contour Estimation<br/>f0 in MIDI and Hz]
+    C --> D[Smoothing and Normalization<br/>pitch/energy]
+    D --> E[Novelty Curve
+             based on derivatives]
+    D --> F[Self-Similarity Matrix
+             with checkerboard kernel]
+    E --> G[Fusion of change cues<br/>novelty + self-similarity]
     F --> G
-    G --> H[Detección de límites<br/>de segmentos]
-    H --> I[Cálculo de descriptores<br/>por segmento
-            (pendiente, rango,
-             tensión paramétrica)]
-    I --> J[Clasificador heurístico
-            (exposición, pregunta,
-             respuesta, etc.)]
-    J --> K[Visualización
-            contorno + f0 + colores
-            por etiqueta]
-    J --> L[Export JSON
-            con etiquetas
-            y descriptores]
+    G --> H[Boundary Detection<br/>of segments]
+    H --> I[Descriptor Calculation<br/>per segment
+            (slope, range,
+             parametric tension)]
+    I --> J[Heuristic Classifier
+            (exposition, question,
+             answer, etc.)]
+    J --> K[Visualization
+            contour + f0 + colors
+            by label]
+    J --> L[JSON Export
+            with labels
+            and descriptors]
 ```
 
-- **Autosimilitud**: compara ventanas del contorno para resaltar repeticiones o
-  contrastes; se filtra con un núcleo tipo checkerboard para obtener una curva
-  de novedad adicional.
-- **Fusión de pistas**: la curva de novedad derivada (saltos en pitch/energía)
-  se combina con la curva proveniente de autosimilitud; los picos resultantes
-  definen los posibles cortes de frase.
-- **Clasificación**: cada segmento recibe descriptores de contorno, rango,
-  energía y tensión; un clasificador por reglas asigna roles musicales
-  sencillos (exposición, pregunta, respuesta, transición, etc.).
+- **Self-Similarity**: compares windows of the contour to highlight repetitions or
+  contrasts; it is filtered with a checkerboard kernel to obtain an additional novelty curve.
+- **Cue Fusion**: the derived novelty curve (pitch/energy jumps) is combined with the curve
+  coming from self-similarity; the resulting peaks define the possible phrase boundaries.
+- **Classification**: each segment receives contour, range, energy, and tension descriptors;
+  a rule-based classifier assigns simple musical roles (exposition, question, answer, transition, etc.).
 
-## Pruebas
+## Tests
 
 ```bash
 pytest
