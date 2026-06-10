@@ -1,4 +1,4 @@
-"""Utilidades de visualización para la versión experimental del analizador."""
+"""Visualization utilities for the experimental version of the analyzer."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import matplotlib
 
 
 def _configure_backend() -> None:
-    """Escoger un backend de Matplotlib compatible con el entorno."""
+    """Choose a Matplotlib backend compatible with the environment."""
 
     requested = os.environ.get("MPLBACKEND")
     if requested:
@@ -172,7 +172,7 @@ def _get_plot_step(n_points: int, target: int = 5000) -> int:
 
 
 def _midi_to_hz(pitch_midi: np.ndarray) -> np.ndarray:
-    """Convertir valores MIDI a frecuencia fundamental (f0) en Hz."""
+    """Convert MIDI values to fundamental frequency (f0) in Hz."""
 
     pitch_midi = np.asarray(pitch_midi, dtype=float)
     return 440.0 * np.power(2.0, (pitch_midi - 69.0) / 12.0)

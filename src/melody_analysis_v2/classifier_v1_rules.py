@@ -60,27 +60,27 @@ class MelodyClassifierV1Rules:
         pitch = features.pitch_midi[idx]
         energy = features.energy[idx]
 
-        # Contorno
+        # Contour
         slope = _safe_polyfit(times, pitch)
         delta_pitch = float(pitch[-1] - pitch[0])
         pitch_range = float(np.max(pitch) - np.min(pitch))
 
-        # Energía
+        # Energy
         energy_mean = float(np.mean(energy))
         energy_delta = float(energy[-1] - energy[0])
 
-        # Posición relativa
+        # Relative position
         end_rel = float((pitch[-1] - global_pitch_mean) / (global_pitch_std + 1e-6))
         start_rel = float((pitch[0] - global_pitch_mean) / (global_pitch_std + 1e-6))
 
-        # Arch melódico
+        # Melodic arch
         peak_idx = int(np.argmax(pitch))
         center_rel = float((pitch[peak_idx] - global_pitch_mean) / (global_pitch_std + 1e-6))
 
-        # Duración
+        # Duration
         duration = float(times[-1] - times[0]) if times.size > 1 else 0.0
 
-        # Tensión
+        # Tension
         pitch_z = (pitch - global_pitch_mean) / (global_pitch_std + 1e-6)
         energy_z = (energy - global_energy_mean) / (global_energy_std + 1e-6)
         tension_mean = float(0.5 * np.mean(pitch_z) + 0.5 * np.mean(energy_z))
@@ -110,38 +110,38 @@ class MelodyClassifierV1Rules:
 
         slope_abs = abs(slope)
 
-        # 1) CADENCIA: cierre final
+        # 1) CADENCE: final closure
         if index == total - 1:
             if end_rel < self.end_low_threshold and slope <= 0.0 and energy_delta <= 0.0:
                 return "Cadencia"
             if slope_abs < self.slope_threshold and end_rel < 0.0:
                 return "Cadencia"
 
-        # 2) EXPOSICIÓN: primer segmento
+        # 2) EXPOSITION: first segment
         if index == 0:
             if (slope_abs < self.slope_threshold and 
                 pitch_range <= self.range_threshold and 
                 self.tension_low <= tension <= self.tension_high):
                 return "Exposición"
 
-        # 3) PREGUNTA
+        # 3) QUESTION
         if ((slope > self.slope_threshold or descriptor["delta_pitch"] > self.range_threshold) and 
             end_rel > self.end_high_threshold and tension >= prev_tension):
             return "Pregunta"
 
-        # 4) RESPUESTA
+        # 4) ANSWER
         if ((slope < -self.slope_threshold or descriptor["delta_pitch"] < -self.range_threshold) and 
             (end_rel < start_rel or end_rel < 0.0)):
             return "Respuesta"
 
-        # 5) DESARROLLO
+        # 5) DEVELOPMENT
         if 0 < index < total - 1:
             if (pitch_range >= self.range_high and 
                 tension >= self.tension_high and 
                 center_rel > 0.0):
                 return "Desarrollo"
 
-        # 6) TRANSICIÓN
+        # 6) TRANSITION
         if (tension - prev_tension >= self.transition_delta_tension and slope > 0.0):
             return "Transición"
 
@@ -164,10 +164,10 @@ class MelodyClassifierV1Rules:
 
         prev_tension = 0.0
         for i, segment in enumerate(segments):
-            # Manejo de silencio (voicing mask)
+            # Silence handling (voicing mask)
             idx = slice(segment.start_index, segment.end_index + 1)
             voicing = features.confidence[idx]
-            if np.mean(voicing) < 0.1: # Silencio detectado por voicing
+            if np.mean(voicing) < 0.1: # Silence detected by voicing
                 annotations.append(MelodySegmentAnnotation(segment=segment, label="Silencio", confidence=1.0, descriptor={"is_silence": True}))
                 continue
 

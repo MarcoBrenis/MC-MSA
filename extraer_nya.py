@@ -6,8 +6,8 @@ from pathlib import Path
 
 def escapar_latex(texto):
     """
-    Limpia el texto para que no rompa la compilación en LaTeX.
-    Escapa ampersands, porcentajes, signos de dólar, etc.
+    Cleans text to prevent breaking LaTeX compilation.
+    Escapes ampersands, percentages, dollar signs, etc.
     """
     texto = str(texto).strip()
     reemplazos = {
@@ -25,8 +25,8 @@ def escapar_latex(texto):
 
 def parse_id3v2(filepath):
     """
-    Parsea etiquetas ID3v2 de archivos MP3 en formato puro Python.
-    Retorna un diccionario con 'title', 'artist', 'track' y 'year'.
+    Parses ID3v2 tags from MP3 files using pure Python.
+    Returns a dictionary with 'title', 'artist', 'track', and 'year'.
     """
     tags = {}
     try:
@@ -146,7 +146,7 @@ def clean_classical_title(title, composer):
 
 def clean_artist_list(artist_str):
     if not artist_str:
-        return "Desconocido"
+        return "Unknown"
     clean = artist_str.replace('\x00', ', ').replace('; ', ', ')
     return clean.strip()
 
@@ -156,12 +156,12 @@ def extraer_dataset_a_csv(dir_dataset, es_academico, ruta_csv):
     cover_dir = dir_dataset / "covers"
     
     if not orig_dir.exists():
-        print(f"Error: No se encontró la carpeta de canciones originales en {orig_dir}")
+        print(f"Error: Original tracks folder not found at {orig_dir}")
         return False
         
     files = sorted(list(orig_dir.glob("*.mp3")) + list(orig_dir.glob("*.wav")))
     if not files:
-        print(f"No se encontraron archivos de audio en {orig_dir}")
+        print(f"No audio files found at {orig_dir}")
         return False
         
     cover_files = sorted(list(cover_dir.glob("*.mp3")) + list(cover_dir.glob("*.wav"))) if cover_dir.exists() else []
@@ -188,10 +188,10 @@ def extraer_dataset_a_csv(dir_dataset, es_academico, ruta_csv):
         year = tags_orig.get('year')
         if not year:
             m_year = re.search(r'\b(19\d\d|20\d\d)\b', f.name)
-            year = m_year.group(1) if m_year else "Desconocido"
+            year = m_year.group(1) if m_year else "Unknown"
             
         if es_academico:
-            author = detect_composer(f.name, tags_orig) or "Desconocido"
+            author = detect_composer(f.name, tags_orig) or "Unknown"
             
             title = tags_orig.get('title')
             if title:
@@ -200,7 +200,7 @@ def extraer_dataset_a_csv(dir_dataset, es_academico, ruta_csv):
                 cleaned_name = re.sub(r'^\d+\s*-\s*', '', f.name)
                 cleaned_name = re.sub(r'\s*\((Remastered|Recorded)\s+\d{4}\)', '', cleaned_name)
                 cleaned_name = re.sub(r'\.(mp3|wav)$', '', cleaned_name, flags=re.IGNORECASE)
-                if author != "Desconocido":
+                if author != "Unknown":
                     cleaned_name = re.sub(rf'\s*_\s*{author}\s*_\s*', ': ', cleaned_name, flags=re.IGNORECASE)
                 title = cleaned_name.replace('_', ' ').replace('  ', ' ').strip()
         else:
@@ -221,7 +221,7 @@ def extraer_dataset_a_csv(dir_dataset, es_academico, ruta_csv):
                         author = author or parts[0]
                         title = title or ' - '.join(parts[1:])
                     else:
-                        author = author or "Desconocido"
+                        author = author or "Unknown"
                         title = title or cleaned_name
             
         orig_interpreter = tags_orig.get('artist')
@@ -229,7 +229,7 @@ def extraer_dataset_a_csv(dir_dataset, es_academico, ruta_csv):
             orig_interpreter = author
         orig_interpreter = clean_artist_list(orig_interpreter)
         
-        cover_interpreter = "Desconocido"
+        cover_interpreter = "Unknown"
         if f_cover:
             cover_interpreter = tags_cover.get('artist')
             if not cover_interpreter:
@@ -285,28 +285,28 @@ def extraer_dataset_a_csv(dir_dataset, es_academico, ruta_csv):
         for line in clean_txt_lines:
             txtfile.write(line + "\n")
             
-    print(f"¡Extracción completada!")
-    print(f"  - Guardado CSV en: {ruta_csv}")
-    print(f"  - Guardado TXT limpio en: {ruta_txt}")
+    print(f"Extraction completed!")
+    print(f"  - CSV saved at: {ruta_csv}")
+    print(f"  - Clean TXT saved at: {ruta_txt}")
     
-    print("\n--- CONTENIDO DEL ARCHIVO TXT LIMPIO ---")
+    print("\n--- CONTENT OF CLEAN TXT FILE ---")
     for line in clean_txt_lines:
         print(line)
-    print("----------------------------------------\n")
+    print("----------------------------------\n")
     
     return True
 
 def generar_tabla_latex(ruta_csv, ruta_salida, titulo_seccion, etiqueta_tabla, descripcion):
     """
-    Lee un archivo CSV y genera el código LaTeX completo.
-    Si el CSV tiene la columna 'Autor' (Académico), genera una tabla de 4 columnas.
-    Si no tiene 'Autor' (Popular), genera una tabla de 3 columnas.
+    Reads a CSV file and generates the complete LaTeX code.
+    If the CSV contains the 'Autor' column (Academic), generates a 4-column table.
+    Otherwise (Popular), generates a 3-column table.
     """
     if not os.path.exists(ruta_csv):
-        print(f"Error: No se encontró el archivo {ruta_csv}")
+        print(f"Error: File not found {ruta_csv}")
         return
 
-    # Leer encabezados para detectar si contiene 'Autor'
+    # Read headers to detect if 'Autor' is present
     with open(ruta_csv, mode='r', encoding='utf-8') as archivo_csv:
         lector = csv.DictReader(archivo_csv)
         tiene_autor = 'Autor' in lector.fieldnames
@@ -374,12 +374,12 @@ def generar_tabla_latex(ruta_csv, ruta_salida, titulo_seccion, etiqueta_tabla, d
         lector = csv.DictReader(archivo_csv)
         
         for fila in lector:
-            cancion = escapar_latex(fila.get('Cancion', 'Desconocido'))
-            original = escapar_latex(fila.get('Original', 'Desconocido'))
-            cover = escapar_latex(fila.get('Cover', 'Desconocido'))
+            cancion = escapar_latex(fila.get('Cancion', 'Unknown'))
+            original = escapar_latex(fila.get('Original', 'Unknown'))
+            cover = escapar_latex(fila.get('Cover', 'Unknown'))
             
             if tiene_autor:
-                autor = escapar_latex(fila.get('Autor', 'Desconocido'))
+                autor = escapar_latex(fila.get('Autor', 'Unknown'))
                 latex_code += f"{cancion} & {autor} & {original} & {cover} \\\\\n"
             else:
                 latex_code += f"{cancion} & {original} & {cover} \\\\\n"
@@ -389,15 +389,15 @@ def generar_tabla_latex(ruta_csv, ruta_salida, titulo_seccion, etiqueta_tabla, d
     with open(ruta_salida, mode='w', encoding='utf-8') as archivo_salida:
         archivo_salida.write(latex_code)
         
-    print(f"¡Éxito! Tabla generada en: {ruta_salida}")
+    print(f"Success! Table generated at: {ruta_salida}")
 
 def procesar_un_dataset(ds_path):
     ds_name = ds_path.name
-    print(f"\nProcesando dataset: {ds_name}...")
+    print(f"\nProcessing dataset: {ds_name}...")
     
     es_academico = "acad" in ds_name.lower()
     
-    confirm = input(f"¿Es un dataset de música clásica/académica? (s/N) [Por defecto: {'Sí' if es_academico else 'No'}]: ").strip().lower()
+    confirm = input(f"Is this a classical/academic music dataset? (y/N) [Default: {'Yes' if es_academico else 'No'}]: ").strip().lower()
     if confirm in ['s', 'si', 'y', 'yes']:
         es_academico = True
     elif confirm in ['n', 'no']:
@@ -423,12 +423,12 @@ def procesar_un_dataset(ds_path):
         )
 
 def procesar_predeterminados(base_path):
-    # --- CORPUS POPULAR ---
+    # --- POPULAR CORPUS ---
     dir_popular = base_path / "dataset_clei"
     if not dir_popular.exists():
         dir_popular = base_path / "dataset_OA"
         
-    print(f"\nProcesando Corpus Popular desde: {dir_popular.name}...")
+    print(f"\nProcessing Popular Corpus from: {dir_popular.name}...")
     popular_ok = extraer_dataset_a_csv(dir_popular, es_academico=False, ruta_csv="dataset_popular.csv")
     
     if popular_ok:
@@ -446,9 +446,9 @@ def procesar_predeterminados(base_path):
             descripcion=texto_popular
         )
         
-    # --- CORPUS ACADÉMICO ---
+    # --- ACADEMIC CORPUS ---
     dir_academico = base_path / "dataset_Acad"
-    print(f"\nProcesando Corpus Académico desde: {dir_academico.name}...")
+    print(f"\nProcessing Academic Corpus from: {dir_academico.name}...")
     academico_ok = extraer_dataset_a_csv(dir_academico, es_academico=True, ruta_csv="dataset_academico.csv")
     
     if academico_ok:
@@ -476,21 +476,21 @@ def menu_seleccion_dataset():
     datasets.sort()
     
     print("\n" + "=" * 60)
-    print("      EXTRACTOR DE METADATOS (Pista, Canción, Artista, Año)")
+    print("      METADATA EXTRACTOR (Track, Song, Artist, Year)")
     print("=" * 60)
-    print("Seleccione el dataset a procesar:")
+    print("Select the dataset to process:")
     for i, ds in enumerate(datasets, 1):
         orig_dir = base_path / ds / "originales"
         count = len(list(orig_dir.glob("*.mp3")) + list(orig_dir.glob("*.wav")))
-        print(f"  [{i}] {ds} ({count} pistas)")
+        print(f"  [{i}] {ds} ({count} tracks)")
     
-    print(f"  [{len(datasets) + 1}] Procesar datasets predeterminados (Popular + Académico)")
-    print(f"  [{len(datasets) + 2}] Salir")
+    print(f"  [{len(datasets) + 1}] Process default datasets (Popular + Academic)")
+    print(f"  [{len(datasets) + 2}] Exit")
     print("=" * 60)
     
     while True:
         try:
-            opcion = input(f"Seleccione una opción (1-{len(datasets) + 2}): ").strip()
+            opcion = input(f"Select an option (1-{len(datasets) + 2}): ").strip()
             if not opcion:
                 continue
             idx = int(opcion)
@@ -502,20 +502,20 @@ def menu_seleccion_dataset():
                 procesar_predeterminados(base_path)
                 break
             elif idx == len(datasets) + 2:
-                print("Operación cancelada. ¡Adiós!")
+                print("Operation cancelled. Goodbye!")
                 break
             else:
-                print("Opción no válida. Intente de nuevo.")
+                print("Invalid option. Please try again.")
         except ValueError:
-            print("Por favor, ingrese un número de option válido.")
+            print("Please enter a valid option number.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Extrae número de pista, artista, nombre de canción y año de un dataset de audio, y opcionalmente genera tablas LaTeX."
+        description="Extracts track number, artist, song title, and year from an audio dataset, and optionally generates LaTeX tables."
     )
-    parser.add_argument("--dataset_dir", type=str, help="Ruta al directorio del dataset (que contenga la carpeta 'originales')")
-    parser.add_argument("--output_csv", type=str, help="Ruta de salida para el archivo CSV generado")
-    parser.add_argument("--es_academico", action="store_true", help="Indica si el dataset es de música clásica/académica")
+    parser.add_argument("--dataset_dir", type=str, help="Path to the dataset directory (which contains the 'originales' folder)")
+    parser.add_argument("--output_csv", type=str, help="Output path for the generated CSV file")
+    parser.add_argument("--es_academico", action="store_true", help="Indicates if the dataset is classical/academic music")
     
     args = parser.parse_args()
     

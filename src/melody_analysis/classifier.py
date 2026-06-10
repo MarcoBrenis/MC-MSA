@@ -90,29 +90,29 @@ class MelodyClassifier:
         pitch = features.pitch_midi[idx]
         energy = features.energy[idx]
 
-        # Contorno
+        # Contour
         slope = _safe_polyfit(times, pitch)
         delta_pitch = float(pitch[-1] - pitch[0])
         pitch_range = float(np.max(pitch) - np.min(pitch))
 
-        # Energía
+        # Energy
         energy_mean = float(np.mean(energy))
         energy_delta = float(energy[-1] - energy[0])
 
-        # Posición relativa en el registro global
+        # Relative position en el registro global
         end_rel = float((pitch[-1] - global_pitch_mean) / (global_pitch_std + 1e-6))
         start_rel = float((pitch[0] - global_pitch_mean) / (global_pitch_std + 1e-6))
 
-        # Arch melódico: pico interno vs extremos
+        # Melodic arch: pico interno vs extremos
         peak_idx = int(np.argmax(pitch))
         center_rel = float(
             (pitch[peak_idx] - global_pitch_mean) / (global_pitch_std + 1e-6)
         )
 
-        # Duración temporal del segmento
+        # Duration temporal del segmento
         duration = float(times[-1] - times[0]) if times.size > 1 else 0.0
 
-        # Tensión paramétrica (pitch alto + energía alta)
+        # Tension paramétrica (pitch alto + energía alta)
         pitch_z = (pitch - global_pitch_mean) / (global_pitch_std + 1e-6)
         energy_z = (energy - global_energy_mean) / (global_energy_std + 1e-6)
         tension_mean = float(0.5 * np.mean(pitch_z) + 0.5 * np.mean(energy_z))
@@ -149,7 +149,7 @@ class MelodyClassifier:
 
         slope_abs = abs(slope)
 
-        # 1) CADENCIA: cierre final, descenso / estabilización + caída de energía/tensión
+        # 1) CADENCE: final closure, descenso / estabilización + caída de energía/tensión
         if index == total - 1:
             if (
                 end_rel < self.end_low_threshold
@@ -162,7 +162,7 @@ class MelodyClassifier:
             if slope_abs < self.slope_threshold and end_rel < 0.0:
                 return "cadencia"
 
-        # 2) EXPOSICIÓN: primer segmento, presentación estable del material
+        # 2) EXPOSITION: first segment, presentación estable del material
         if index == 0:
             if (
                 slope_abs < self.slope_threshold
@@ -171,7 +171,7 @@ class MelodyClassifier:
             ):
                 return "exposicion"
 
-        # 3) PREGUNTA: contorno ascendente / final alto, tensión creciente
+        # 3) QUESTION: contorno ascendente / final alto, tensión creciente
         if (
             (slope > self.slope_threshold or descriptor["delta_pitch"] > self.range_threshold)
             and end_rel > self.end_high_threshold
@@ -179,14 +179,14 @@ class MelodyClassifier:
         ):
             return "pregunta"
 
-        # 4) RESPUESTA: contorno descendente / regreso al registro medio/bajo
+        # 4) ANSWER: contorno descendente / regreso al registro medio/bajo
         if (
             (slope < -self.slope_threshold or descriptor["delta_pitch"] < -self.range_threshold)
             and (end_rel < start_rel or end_rel < 0.0)
         ):
             return "respuesta"
 
-        # 5) DESARROLLO: interior, rango amplio y alta tensión (pico del arch melódico)
+        # 5) DEVELOPMENT: interior, rango amplio y alta tensión (pico del arch melódico)
         if 0 < index < total - 1:
             if (
                 pitch_range >= self.range_high
@@ -195,7 +195,7 @@ class MelodyClassifier:
             ):
                 return "desarrollo"
 
-        # 6) TRANSICIÓN: aumento claro de tensión pero sin llegar a pregunta
+        # 6) TRANSITION: aumento claro de tensión pero sin llegar a pregunta
         if (
             tension - prev_tension >= self.transition_delta_tension
             and slope > 0.0

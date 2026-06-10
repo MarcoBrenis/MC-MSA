@@ -20,28 +20,28 @@ from src.melody_analysis_v2.visualization import (
 )
 
 METHOD_CLASSIFICATION = {
-    'pyin': 'Frecuencia Fundamental (F0 Extractor)',
-    'yin': 'Frecuencia Fundamental (F0 Extractor)',
-    'crepe': 'Frecuencia Fundamental (F0 Extractor)',
-    'rmvpe': 'Frecuencia Fundamental (F0 Extractor)',
-    'spice': 'Frecuencia Fundamental (F0 Extractor)',
-    'jdc': 'Frecuencia Fundamental (F0 Extractor)',
-    'fcn_f0': 'Frecuencia Fundamental (F0 Extractor)',
-    'melodia': 'Extractor de Melodía (Melody Extractor - Salamon)',
-    'demucs_crepe': 'Extractor de Melodía (Melody Extractor - Demucs+CREPE)',
-    'bs_roformer_rmvpe': 'Extractor de Melodía (Melody Extractor - Roformer+RMVPE)',
-    'bs_roformer': 'Extractor de Melodía (Melody Extractor - Roformer+RMVPE)',
-    'demucs': 'Extractor de Melodía (Melody Extractor - Demucs+CREPE)',
+    'pyin': 'Fundamental Frequency (F0 Extractor)',
+    'yin': 'Fundamental Frequency (F0 Extractor)',
+    'crepe': 'Fundamental Frequency (F0 Extractor)',
+    'rmvpe': 'Fundamental Frequency (F0 Extractor)',
+    'spice': 'Fundamental Frequency (F0 Extractor)',
+    'jdc': 'Fundamental Frequency (F0 Extractor)',
+    'fcn_f0': 'Fundamental Frequency (F0 Extractor)',
+    'melodia': 'Melody Extractor (Melody Extractor - Salamon)',
+    'demucs_crepe': 'Melody Extractor (Melody Extractor - Demucs+CREPE)',
+    'bs_roformer_rmvpe': 'Melody Extractor (Melody Extractor - Roformer+RMVPE)',
+    'bs_roformer': 'Melody Extractor (Melody Extractor - Roformer+RMVPE)',
+    'demucs': 'Melody Extractor (Melody Extractor - Demucs+CREPE)',
     'bs_roformer_crepe': 'Extractor de Melodía (Melody Extractor - Roformer+CREPE)',
     'demucs_rmvpe': 'Extractor de Melodía (Melody Extractor - Demucs+RMVPE)',
-    'basic_pitch': 'Extractor de Melodía (Melody Extractor - Spotify Basic Pitch)',
-    'tachibana': 'Extractor de Melodía (Melody Extractor - Tachibana HPSS+Melodia)',
-    'poliner': 'Extractor de Melodía (Melody Extractor - Poliner & Ellis STFT Peak)',
-    'durrieu': 'Extractor de Melodía (Melody Extractor - Durrieu NMF+YIN)',
-    'ensemble': 'Híbrido (Ensemble F0/Melodía)',
-    'all_f0': 'Todos los extractores de F0',
-    'all_melody': 'Todos los extractores de Melodía',
-    'all': 'Todos los métodos'
+    'basic_pitch': 'Melody Extractor (Melody Extractor - Spotify Basic Pitch)',
+    'tachibana': 'Melody Extractor (Melody Extractor - Tachibana HPSS+Melodia)',
+    'poliner': 'Melody Extractor (Melody Extractor - Poliner & Ellis STFT Peak)',
+    'durrieu': 'Melody Extractor (Melody Extractor - Durrieu NMF+YIN)',
+    'ensemble': 'Hybrid (Ensemble F0/Melody)',
+    'all_f0': 'All F0 extractors',
+    'all_melody': 'All Melody extractors',
+    'all': 'All methods'
 }
 
 def get_audio_files(directory_path: Path, match_mode: str = "id"):
@@ -51,19 +51,19 @@ def get_audio_files(directory_path: Path, match_mode: str = "id"):
     for f in directory_path.iterdir():
         if f.is_file() and f.suffix.lower() in ['.mp3', '.wav']:
             if match_mode == "stem":
-                # Normalizar el stem del archivo
+                # Normalize the file stem
                 name = f.stem.lower()
-                # Quitar sufijos comunes
+                # Remove common suffixes
                 name = re.sub(r'[-_](cover|originales|original|orig|ref|covers|version|var)', '', name)
-                # Quitar prefijos numéricos si están presentes
+                # Remove numeric prefixes if present
                 name = re.sub(r'^\d+\s*[-_]?\s*', '', name)
-                # Mantener solo caracteres alfanuméricos
+                # Keep only alphanumeric characters
                 name = re.sub(r'[^a-z0-9]', '', name)
                 key = name.strip()
                 if key:
                     result[key] = f
             elif match_mode == "fuzzy":
-                # Guardar por nombre completo (garantizado único)
+                # Save by full name (guaranteed unique)
                 result[f.name] = f
             else: # "id"
                 match = re.search(r'^(\d+)', f.name)
@@ -80,7 +80,7 @@ def pair_files_fuzzy(orig_files: dict[str, Path], cover_files: dict[str, Path]) 
     paired_orig = {}
     paired_cover = {}
     
-    # 1. Agrupar por prefijo numérico (o grupo 0 por defecto)
+    # 1. Group by numeric prefix (or group 0 by default)
     def get_prefix_and_text(filename: str):
         match = re.match(r'^(\d+)\s*[-_]?\s*(.*)', filename)
         if match:
@@ -98,13 +98,13 @@ def pair_files_fuzzy(orig_files: dict[str, Path], cover_files: dict[str, Path]) 
         prefix, text = get_prefix_and_text(name)
         cover_by_prefix.setdefault(prefix, []).append((text, path))
             
-    # 2. Emparejar para cada prefijo
+    # 2. Match for each prefix
     pair_id = 1
     
     def word_overlap(str1: str, str2: str) -> float:
         w1 = set(re.findall(r'[a-zA-Z0-9]+', str1.lower()))
         w2 = set(re.findall(r'[a-zA-Z0-9]+', str2.lower()))
-        # Eliminar palabras de parada comunes
+        # Remove common stopwords
         stopwords = {'cover', 'covers', 'original', 'originales', 'orig', 'ref', 'version', 'mp3', 'wav'}
         w1 = w1 - stopwords
         w2 = w2 - stopwords
@@ -139,7 +139,7 @@ def pair_files_fuzzy(orig_files: dict[str, Path], cover_files: dict[str, Path]) 
     return paired_orig, paired_cover
 
 def calculate_levenshtein_similarity(seq1, seq2) -> float:
-    """Calcula la similitud de Levenshtein normalizada entre dos secuencias de etiquetas."""
+    """Calculates normalized Levenshtein similarity between two label sequences."""
     n, m = len(seq1), len(seq2)
     if n == 0 and m == 0:
         return 1.0
@@ -167,7 +167,7 @@ def calculate_levenshtein_similarity(seq1, seq2) -> float:
     return 1.0 - (distance / max_len)
 
 def calculate_pitch_histogram_similarity(pitch1, pitch2) -> float:
-    """Calcula la similitud de coseno de los histogramas de clases de altura (croma)."""
+    """Calculates cosine similarity of pitch class histograms (chroma)."""
     p1_valid = pitch1[~np.isnan(pitch1) & (pitch1 > 0)]
     p2_valid = pitch2[~np.isnan(pitch2) & (pitch2 > 0)]
     
@@ -196,7 +196,7 @@ def calculate_pitch_histogram_similarity(pitch1, pitch2) -> float:
     return float(np.dot(hist1, hist2))
 
 def evaluate_binary_classification(pairwise_results, metric_name, lower_is_better=False):
-    """Evalúa la clasificación binaria para una métrica dada sobre un rango de umbrales."""
+    """Evaluates binary classification for a given metric over a range of thresholds."""
     valid_results = [r for r in pairwise_results if r[0] is not None and r[0] >= 0]
     if not valid_results:
         return 0.0, None, []
@@ -320,7 +320,7 @@ def load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix="
         except Exception:
             pass
             
-    # Si no existe tiny, usar el flujo en un subproceso para evitar leaks de memoria/OOM
+    # If tiny does not exist, use subprocess pipeline to avoid memory leaks/OOM
     script_path = Path(__file__).parent / "src" / "melody_analysis_v2" / "analyze_single.py"
     cmd = [
         sys.executable,
@@ -332,12 +332,12 @@ def load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix="
     ]
     subprocess.run(cmd, check=True)
     
-    # Una vez completado, el cache normal .json ya está guardado en disco.
+    # Once completed, the normal cache .json is already saved on disk.
     res = load_or_analyze(analyzer, file_path, method, cache_dir)
     seq = [s.label for s in res.segments]
     pitch_midi = res.features.pitch_midi.copy() if res.features.pitch_midi is not None else None
     
-    # Escribir el tiny json
+    # Write the tiny json
     tiny_data = {
         'seq': seq,
         'pitch_midi': pitch_midi.tolist() if pitch_midi is not None else []
@@ -360,8 +360,8 @@ def load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix="
 
 def parse_id3v2(filepath):
     """
-    Parsea etiquetas ID3v2 de archivos MP3 en formato puro Python.
-    Retorna un diccionario con 'title', 'artist'.
+    Parses ID3v2 tags from MP3 files in pure Python format.
+    Returns a dictionary with 'title', 'artist'.
     """
     tags = {}
     try:
@@ -441,7 +441,7 @@ def get_audio_metadata(filepath):
             title = title or ' - '.join(parts[1:])
         else:
             title = title or cleaned
-            artist = artist or "Desconocido"
+            artist = artist or "Unknown"
     return title.strip(), artist.strip()
 
 
@@ -480,7 +480,7 @@ def plot_caplin_bands(res_orig, res_cover, output_path: Path, meta_orig=None, me
             
             ax.axvspan(start_time, end_time, facecolor=color, alpha=0.8, edgecolor='black', linewidth=0.5)
             
-            # Solo dibujar texto si el segmento es suficientemente ancho para evitar encimamiento
+            # Only draw text if segment is wide enough to avoid overlap
             if duration > (max_time * 0.015): 
                 mid_time = (start_time + end_time) / 2
                 ax.text(mid_time, 0.5, display_abbr, horizontalalignment='center', verticalalignment='center',
@@ -547,7 +547,7 @@ def plot_caplin_contour(res_orig, res_cover, output_path: Path, meta_orig=None, 
             
             ax.axvspan(seg.segment.start_time, seg.segment.end_time, color=color, alpha=0.3)
             
-            # Label on top (solo si hay espacio)
+            # Label on top (only if space)
             duration = seg.segment.end_time - seg.segment.start_time
             if duration > (max_time * 0.02):
                 mid_time = (seg.segment.start_time + seg.segment.end_time) / 2
@@ -683,7 +683,7 @@ def plot_melody_and_energy_comparison(res_orig, res_cover, output_path: Path, me
 def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     summary_path = output_dir / "benchmark_summary.csv"
     if not summary_path.exists():
-        print(f"[Tabla Comparativa] No se encontró el archivo de resumen en {summary_path}")
+        print(f"[Comparative Table] Summary file not found at {summary_path}")
         return
         
     dataset_name = dataset_dir.name
@@ -698,7 +698,7 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
                 if len(parts) >= 6:
                     method_rows[parts[0]] = parts
     except Exception as e:
-        print(f"Error leyendo {summary_path}: {e}")
+        print(f"Error reading {summary_path}: {e}")
         return
         
     if not method_rows:
@@ -735,7 +735,7 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
                 dtw = float(row[5])
                 lines.append(f"{method_disp:<25} | {lcs:>12.2f}% | {mrr:>8.2f}% | {top5:>10.2f}% | {'-':>11} | {dtw:>10.2f}")
         except Exception as e:
-            lines.append(f"{method.upper():<25} | Error al formatear fila: {e}")
+            lines.append(f"{method.upper():<25} | Error formatting row: {e}")
             
     lines.append("-" * 90)
     
@@ -743,9 +743,9 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     table_path = dataset_dir / "tabla_comparativa.txt"
     try:
         table_path.write_text(table_content, encoding='utf-8')
-        print(f"\n[Tabla Comparativa] Guardada exitosamente en {table_path}")
+        print(f"\n[Comparative Table] Successfully saved at {table_path}")
     except Exception as e:
-        print(f"Error al escribir tabla comparativa: {e}")
+        print(f"Error writing comparative table: {e}")
 
 
 def find_available_datasets(directory: Path):
@@ -768,27 +768,27 @@ def main():
         'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
         'bs_roformer', 'demucs', 'ensemble'
     ]
-    parser = argparse.ArgumentParser(description="Benchmark para extracción de melodía con soporte para caché.")
+    parser = argparse.ArgumentParser(description="Melody extraction benchmark with cache support.")
     parser.add_argument("--method", type=str, default=None, 
                         choices=available_methods,
-                        help="Método de extracción a utilizar")
+                        help="Extraction method to use")
     parser.add_argument("--dataset_dir", type=str, default=None,
-                        help="Directorio base del dataset")
+                        help="Base directory of the dataset")
     parser.add_argument("--orig_subdir", type=str, default="originales",
-                        help="Subdirectorio de canciones originales")
+                        help="Subdirectory of original songs")
     parser.add_argument("--cover_subdir", type=str, default="covers",
-                        help="Subdirectorio de canciones covers")
+                        help="Subdirectory of cover songs")
     parser.add_argument("--output_dir", type=str, default="resultados_benchmark",
-                        help="Directorio para salidas gráficas y reportes (si es relativo se resolverá dentro de la carpeta del dataset)")
+                        help="Directory for graphical outputs and reports (if relative, resolves inside dataset folder)")
     parser.add_argument("--cache_dir", type=str, default="cache",
-                        help="Directorio para la caché de análisis JSON")
+                        help="Directory for JSON analysis cache")
     parser.add_argument("--match_mode", type=str, default=None,
                         choices=["id", "stem"],
-                        help="Método de emparejamiento: 'id' (ID numérico de prefijo) o 'stem' (nombre/stem normalizado)")
+                        help="Match method: 'id' (numeric ID prefix) or 'stem' (normalized name/stem)")
     parser.add_argument("--dtw_all_pairs", action="store_true",
-                        help="Calcular DTW para todos los pares (lento)")
+                        help="Compute DTW for all pairs (slow)")
     parser.add_argument("--clear_cache", action="store_true",
-                        help="Eliminar la caché existente para el método seleccionado antes de comenzar")
+                        help="Delete existing cache for the selected method before starting")
     args = parser.parse_args()
 
     base_dir = Path(__file__).parent.absolute()
@@ -796,19 +796,19 @@ def main():
     if args.dataset_dir is None:
         datasets = find_available_datasets(base_dir)
         if not datasets:
-            print("\nNo se detectaron carpetas de dataset automáticamente en el directorio base.")
-            manual = input("Por favor ingrese la ruta o nombre del dataset a utilizar: ").strip()
+            print("\nNo dataset folders automatically detected in the base directory.")
+            manual = input("Please enter the path or name of the dataset to use: ").strip()
             args.dataset_dir = manual
         else:
-            print("\n=== Selección de Dataset ===")
+            print("\n=== Dataset Selection ===")
             for i, d in enumerate(datasets, 1):
                 print(f"{i}. {d}")
-            print(f"{len(datasets) + 1}. [Procesar TODOS los datasets de una vez]")
-            print(f"{len(datasets) + 2}. [Ingresar otra ruta manual...]")
+            print(f"{len(datasets) + 1}. [Process ALL datasets at once]")
+            print(f"{len(datasets) + 2}. [Enter another manual path...]")
             
             while True:
                 try:
-                    choice = input(f"\nSeleccione un dataset (1-{len(datasets) + 2}): ").strip()
+                    choice = input(f"\nSelect a dataset (1-{len(datasets) + 2}): ").strip()
                     idx = int(choice) - 1
                     if 0 <= idx < len(datasets):
                         args.dataset_dir = datasets[idx]
@@ -817,12 +817,12 @@ def main():
                         args.dataset_dir = "all"
                         break
                     elif idx == len(datasets) + 1:
-                        manual = input("Ingrese la ruta o nombre del dataset: ").strip()
+                        manual = input("Enter the path or name of the dataset: ").strip()
                         if manual:
                             args.dataset_dir = manual
                             break
                     else:
-                        print(f"Error: Por favor seleccione un número entre 1 y {len(datasets) + 2}.")
+                        print(f"Error: Please select a number between 1 and {len(datasets) + 2}.")
                 except ValueError:
                     if choice in datasets:
                         args.dataset_dir = choice
@@ -830,10 +830,10 @@ def main():
                     elif choice.lower() == "all":
                         args.dataset_dir = "all"
                         break
-                    print("Error: Entrada no válida. Ingrese el número de opción o el nombre exacto.")
+                    print("Error: Invalid input. Enter option number or exact name.")
 
     if args.method is None:
-        print("\n=== Selección de Método de Extracción ===")
+        print("\n=== Extraction Method Selection ===")
         
         f0_methods = ['pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0']
         melody_methods = [
@@ -846,39 +846,39 @@ def main():
         idx_map = {}
         curr_idx = 1
         
-        print("\n--- Extractores de F0 (Frecuencia Fundamental) ---")
+        print("\n--- F0 Extractors (Fundamental Frequency) ---")
         for m in f0_methods:
             print(f"  {curr_idx:2d}. {m}")
             idx_map[curr_idx] = m
             curr_idx += 1
             
-        print(f"  {curr_idx:2d}. {'all_f0':<20} [Todos los extractores de F0]")
+        print(f"  {curr_idx:2d}. {'all_f0':<20} [All F0 extractors]")
         idx_map[curr_idx] = 'all_f0'
         curr_idx += 1
         
-        print("\n--- Extractores de Melodía ---")
+        print("\n--- Melody Extractors ---")
         for m in melody_methods:
             print(f"  {curr_idx:2d}. {m}")
             idx_map[curr_idx] = m
             curr_idx += 1
             
-        print(f"  {curr_idx:2d}. {'all_melody':<20} [Todos los extractores de Melodía]")
+        print(f"  {curr_idx:2d}. {'all_melody':<20} [All Melody extractors]")
         idx_map[curr_idx] = 'all_melody'
         curr_idx += 1
         
-        print("\n--- Otros / Especiales ---")
+        print("\n--- Others / Specials ---")
         for m in other_methods:
             classification = METHOD_CLASSIFICATION.get(m, "")
             print(f"  {curr_idx:2d}. {m:<20} [{classification}]")
             idx_map[curr_idx] = m
             curr_idx += 1
             
-        print(f"  {curr_idx:2d}. {'all':<20} [Todos los métodos]")
+        print(f"  {curr_idx:2d}. {'all':<20} [All methods]")
         idx_map[curr_idx] = 'all'
         
         while True:
             try:
-                choice = input(f"\nSeleccione un método (1-{curr_idx}): ").strip()
+                choice = input(f"\nSelect a method (1-{curr_idx}): ").strip()
                 if choice.lower() in available_methods:
                     args.method = choice.lower()
                     break
@@ -887,23 +887,23 @@ def main():
                     args.method = idx_map[idx]
                     break
                 else:
-                    print(f"Error: Por favor seleccione un número entre 1 y {curr_idx}.")
+                    print(f"Error: Please select a number between 1 and {curr_idx}.")
                     gc.collect()
             except ValueError:
                 if choice.strip().lower() in available_methods:
                     args.method = choice.strip().lower()
                     break
-                print("Error: Entrada no válida. Ingrese el número del método o el nombre.")
+                print("Error: Invalid input. Enter method number or name.")
                 gc.collect()
 
     if args.match_mode is None:
-        print("\n=== Selección de Método de Emparejamiento ===")
-        print("1. Por ID Numérico (ej: '01 - Pedro Infante.wav' con '01 - Cover.mp3')")
-        print("2. Por Nombre / Stem Exacto (ej: 'Te_Vi_Venir_Original.wav' con 'Te Vi Venir (Covers).mp3')")
-        print("3. Emparejamiento Inteligente / Fuzzy (Para nombres complejos o música clásica, ej: '02 - Symphony No. 40...')")
+        print("\n=== Match Method Selection ===")
+        print("1. By Numeric ID (e.g. '01 - Pedro Infante.wav' with '01 - Cover.mp3')")
+        print("2. By Exact Name / Stem (e.g. 'Te_Vi_Venir_Original.wav' with 'Te Vi Venir (Covers).mp3')")
+        print("3. Smart / Fuzzy Match (For complex names or classical music, e.g. '02 - Symphony No. 40...')")
         
         while True:
-            choice = input("\nSeleccione el método de emparejamiento (1-3) [Por defecto: 1]: ").strip()
+            choice = input("\nSelect match method (1-3) [Default: 1]: ").strip()
             if not choice or choice == "1":
                 args.match_mode = "id"
                 break
@@ -914,7 +914,7 @@ def main():
                 args.match_mode = "fuzzy"
                 break
             else:
-                print("Error: Por favor seleccione 1, 2 o 3.")
+                print("Error: Please select 1, 2 or 3.")
                 
     args.match_by_stem = (args.match_mode == "stem")
     run_benchmark_execution(args, base_dir)
@@ -928,7 +928,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
         output_dir = dataset_dir / output_dir
         
     if not orig_dir.exists() or not cover_dir.exists():
-        print(f"Las carpetas de origen '{orig_dir}' y/o '{cover_dir}' no existen en {dataset_dir.name}. Saltando...")
+        print(f"Source directories '{orig_dir}' y/o '{cover_dir}' do not exist in {dataset_dir.name}. Skipping...")
         return
         
     orig_files = get_audio_files(orig_dir, match_mode=args.match_mode)
@@ -941,16 +941,16 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
         common_ids = sorted(list(set(orig_files.keys()).intersection(set(cover_files.keys()))))
         
     print("\n" + "="*80)
-    print(f" PROCESANDO DATASET: {dataset_dir.name} ({len(common_ids)} pares encontrados)")
+    print(f" PROCESSING DATASET: {dataset_dir.name} ({len(common_ids)} pairs found)")
     print("="*80)
     
     if not common_ids:
-        print("No se encontraron pares válidos. Saltando...")
+        print("No se encontraron pares válidos. Skipping...")
         return
 
-    print("Métodos a evaluar:")
+    print("Methods to evaluate:")
     for m in methods:
-        classification = METHOD_CLASSIFICATION.get(m, "Desconocido")
+        classification = METHOD_CLASSIFICATION.get(m, "Unknown")
         print(f"  - {m}: {classification}")
 
     classifier = MelodyClassifierPaper()
@@ -958,11 +958,11 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     if not summary_path.exists():
         with open(summary_path, 'w') as f:
-            f.write("metodo,pares,lcs_promedio,mrr,top5_prec,top10_prec,dtw_promedio\n")
+            f.write("method,pairs,avg_lcs,mrr,top5_prec,top10_prec,avg_dtw\n")
 
     for method in methods:
-        classification = METHOD_CLASSIFICATION.get(method, "Desconocido")
-        print(f"\n[{method}] Procesando... ({classification})")
+        classification = METHOD_CLASSIFICATION.get(method, "Unknown")
+        print(f"\n[{method}] Processing... ({classification})")
         analyzer = MelodyAnalyzer(extraction_method=method, classifier=classifier)
         
         out_method_dir = output_dir / method
@@ -984,9 +984,9 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
                 res_originals[uid] = load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=prefix)
                 gc.collect()
             except Exception as e:
-                print(f"\nError analizando original {uid} ({method}): {e}")
+                print(f"\nError analyzing original {uid} ({method}): {e}")
                 res_originals[uid] = None
-        print(f"\n  Originales cargados.")
+        print(f"\n  Originals loaded.")
 
         res_covers = {}
         for i, uid in enumerate(common_ids, 1):
@@ -1003,21 +1003,21 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
                 res_covers[uid] = load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=prefix)
                 gc.collect()
             except Exception as e:
-                print(f"\nError analizando cover {uid} ({method}): {e}")
+                print(f"\nError analyzing cover {uid} ({method}): {e}")
                 res_covers[uid] = None
-        print(f"\n  Covers cargados.")
+        print(f"\n  Covers loaded.")
         lcs_list, dtw_list, mrr_sum, top5_hits, top10_hits, valid_count = [], [], 0.0, 0, 0, 0
         best_lcs, best_uid = -1.0, None
         detailed_results = []
         
-        # Almacenar resultados uno a uno para barajar umbrales
+        # Store results one by one to shuffle thresholds
         pairwise_lcs = []
         pairwise_lev = []
         pairwise_pitch_hist = []
         pairwise_dtw = []
         all_comparisons = []
 
-        # Cargar caché de comparaciones si existe
+        # Load comparisons cache if it exists
         comp_cache_path = cache_dir / method / f"comparison_cache_{dataset_dir.name}.json"
         comp_cache = {}
         comp_cache_changed = False
@@ -1025,13 +1025,13 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
             try:
                 with open(comp_cache_path, 'r', encoding='utf-8') as f:
                     comp_cache = json.load(f)
-                print(f"  [Caché] Cargadas comparaciones previas desde {comp_cache_path.name}")
+                print(f"  [Caché] Loaded previous comparisons from {comp_cache_path.name}")
             except Exception as e:
-                print(f"  [Caché] Advertencia al cargar caché de comparaciones: {e}")
+                print(f"  [Caché] Warning loading comparisons cache: {e}")
         
         for i, uid_cover in enumerate(common_ids, 1):
             try:
-                print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Comparando cover: ID {uid_cover}...", end='\r')
+                print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Comparing cover: ID {uid_cover}...", end='\r')
                 if res_covers[uid_cover] is None: continue
                 
                 seq_cover = res_covers[uid_cover]['seq']
@@ -1047,7 +1047,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
                     seq_orig = res_originals[uid_orig]['seq']
                     pitch_o = res_originals[uid_orig]['pitch_midi']
                     
-                    # Generar una clave única y hash de validación
+                    # Generate a unique key and validation hash
                     key = f"{orig_files[uid_orig].name}:::{cover_files[uid_cover].name}"
                     cached_entry = comp_cache.get(key, {})
                     
@@ -1056,7 +1056,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
                     cover_repr = ",".join(seq_cover) + f"|len:{len(pitch_m)}"
                     h = hashlib.md5(f"{orig_repr}:::{cover_repr}".encode('utf-8')).hexdigest()
                     
-                    # Invalida si los datos subyacentes cambiaron
+                    # Invalidate if underlying data changed
                     if cached_entry.get("hash") != h:
                         cached_entry = {"hash": h}
                         
@@ -1095,7 +1095,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
                         else:
                             f0_orig = np.nan_to_num(np.where(pitch_o > 0, 440.0 * np.power(2.0, (pitch_o - 69.0) / 12.0), 0))
                             try:
-                                # Submuestrear SOLO en canciones extremadamente largas (más de 15 minutos / 38760 tramas)
+                                # Downsample ONLY on extremely long songs (more than 15 minutes / 38760 frames)
                                 if len(f0_cover) > 38760:
                                     ds_factor = len(f0_cover) // 1000
                                     f0_cover_ds = f0_cover[::ds_factor]
@@ -1164,51 +1164,51 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
                     id_label = f"ID {uid_cover:02d}" if isinstance(uid_cover, int) else f"ID {uid_cover}"
                     detailed_results.append(f"{id_label} | LCS: {true_sim:.4f} | Rank: {rank:2d} | DTW: {correct_dtw:.4f}")
             except Exception as e:
-                print(f"\nError procesando cover {uid_cover} ({method}): {e}")
+                print(f"\nError processing cover {uid_cover} ({method}): {e}")
             finally:
                 if 'res_cover' in locals():
                     del res_cover
                 if i % 10 == 0:
                     gc.collect()
                     
-        # Guardar caché de comparaciones si hubo cambios
+        # Save comparisons cache if there were changes
         if comp_cache_changed:
             try:
                 comp_cache_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(comp_cache_path, 'w', encoding='utf-8') as f:
                     json.dump(comp_cache, f, indent=2)
-                print(f"\n  [Caché] Comparaciones guardadas/actualizadas en {comp_cache_path.name}")
+                print(f"\n  [Caché] Comparisons saved/updated at {comp_cache_path.name}")
             except Exception as e:
-                print(f"\n  [Caché] Advertencia al guardar caché de comparaciones: {e}")
+                print(f"\n  [Caché] Warning saving comparisons cache: {e}")
 
         # Metrics summary
-        print(f"\n[{method}] Finalizado.")
+        print(f"\n[{method}] Finished.")
         avg_lcs = np.mean(lcs_list) if lcs_list else 0
         mrr = mrr_sum / valid_count if valid_count else 0
         top5_prec = top5_hits / valid_count if valid_count else 0
         top10_prec = top10_hits / valid_count if valid_count else 0
         avg_dtw = np.mean(dtw_list) if dtw_list else 0
         
-        print(f"[{method}] Resultados | LCS: {avg_lcs:.4f} | MRR: {mrr:.4f} | Top5: {top5_prec:.2%} | Top10: {top10_prec:.2%} | DTW: {avg_dtw:.4f}")
+        print(f"[{method}] Results | LCS: {avg_lcs:.4f} | MRR: {mrr:.4f} | Top5: {top5_prec:.2%} | Top10: {top10_prec:.2%} | DTW: {avg_dtw:.4f}")
         
         # Export to CSV summary
         with open(summary_path, 'a') as f:
             f.write(f"{method},{valid_count},{avg_lcs:.6f},{mrr:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f}\n")
             
-        # Evaluar clasificación binaria y umbrales óptimos
+        # Evaluate binary classification and optimal thresholds
         best_thresh_lcs, best_metrics_lcs, curves_lcs = evaluate_binary_classification(pairwise_lcs, "LCS")
         best_thresh_lev, best_metrics_lev, curves_lev = evaluate_binary_classification(pairwise_lev, "Levenshtein")
         best_thresh_ph, best_metrics_ph, curves_ph = evaluate_binary_classification(pairwise_pitch_hist, "Pitch Histogram")
         best_thresh_dtw, best_metrics_dtw, curves_dtw = evaluate_binary_classification(pairwise_dtw, "DTW", lower_is_better=True)
         
-        # Exportar comparativas_todas.csv
+        # Export comparativas_todas.csv
         comp_csv_path = out_method_dir / "comparativas_todas.csv"
         with open(comp_csv_path, 'w') as f:
             f.write("cover_id,original_id,lcs_similarity,levenshtein_similarity,pitch_hist_similarity,dtw_distance,is_correct\n")
             for comp in all_comparisons:
                 f.write(f"{comp['cover_id']},{comp['original_id']},{comp['lcs_similarity']:.6f},{comp['levenshtein_similarity']:.6f},{comp['pitch_hist_similarity']:.6f},{comp['dtw_distance']},{comp['is_correct']}\n")
                 
-        # Exportar curvas de umbrales
+        # Export threshold curves
         for m_name, curves in [("lcs", curves_lcs), ("levenshtein", curves_lev), ("pitch_hist", curves_ph), ("dtw", curves_dtw)]:
             if not curves: continue
             curve_csv_path = out_method_dir / f"analisis_umbrales_{m_name}.csv"
@@ -1220,46 +1220,46 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
         # Export to Detailed TXT Report
         report_path = out_method_dir / "reporte_detallado.txt"
         with open(report_path, 'w') as f:
-            f.write(f"REPORTE DETALLADO - METODO: {method}\n")
+            f.write(f"DETAILED REPORT - METHOD: {method}\n")
             f.write("="*50 + "\n")
             if best_uid is not None:
-                f.write(f"IMAGENES GENERADAS PARA EL MEJOR MATCH (LCS = {best_lcs:.4f}):\n")
+                f.write(f"IMAGES GENERATED FOR THE BEST MATCH (LCS = {best_lcs:.4f}):\n")
                 f.write(f"  ID: {best_uid}\n")
                 f.write(f"  Original: {orig_files[best_uid].name}\n")
                 f.write(f"  Cover:    {cover_files[best_uid].name}\n")
                 f.write("="*50 + "\n")
             f.write("\n".join(detailed_results) + "\n")
             f.write("="*50 + "\n")
-            f.write(f"RESUMEN GENERAL:\n")
-            f.write(f"Pares evaluados: {valid_count}\n")
-            f.write(f"LCS Promedio:    {avg_lcs:.4f}\n")
+            f.write(f"GENERAL SUMMARY:\n")
+            f.write(f"Pairs evaluated: {valid_count}\n")
+            f.write(f"Average LCS:    {avg_lcs:.4f}\n")
             f.write(f"MRR:             {mrr:.4f}\n")
             f.write(f"Top-5 Precision: {top5_prec:.2%}\n")
             f.write(f"Top-10 Precision: {top10_prec:.2%}\n")
-            f.write(f"DTW Promedio:    {avg_dtw:.4f}\n")
+            f.write(f"Average DTW:    {avg_dtw:.4f}\n")
             f.write("="*50 + "\n")
-            f.write(f"ANALISIS DE UMBRALES DE CLASIFICACION BINARIA (OPTIMIZANDO F1-SCORE):\n\n")
+            f.write(f"BINARY CLASSIFICATION THRESHOLDS ANALYSIS (OPTIMIZING F1-SCORE):\n\n")
             
             for m_name, best_t, best_m in [
-                ("LCS (Subsecuencia Comun)", best_thresh_lcs, best_metrics_lcs),
-                ("Levenshtein (Distancia Edicion)", best_thresh_lev, best_metrics_lev),
-                ("Pitch Class Histogram (Croma Coseno)", best_thresh_ph, best_metrics_ph),
-                ("DTW Distance (Camino Optimo)", best_thresh_dtw, best_metrics_dtw)
+                ("LCS (Longest Common Subsequence)", best_thresh_lcs, best_metrics_lcs),
+                ("Levenshtein (Edit Distance)", best_thresh_lev, best_metrics_lev),
+                ("Pitch Class Histogram (Chroma Cosine)", best_thresh_ph, best_metrics_ph),
+                ("DTW Distance (Optimal Path)", best_thresh_dtw, best_metrics_dtw)
             ]:
                 f.write(f"--- Metrica: {m_name} ---\n")
                 if best_m:
-                    f.write(f"  Umbral Optimo:  {best_t:.4f}\n")
+                    f.write(f"  Optimal Threshold:  {best_t:.4f}\n")
                     f.write(f"  F1-Score:       {best_m['f1_score']:.4f}\n")
                     f.write(f"  Precision:      {best_m['precision']:.4f}\n")
                     f.write(f"  Recall (Sens.): {best_m['recall']:.4f}\n")
                     f.write(f"  Accuracy:       {best_m['accuracy']:.4f}\n")
-                    f.write(f"  Matriz de Confusion:\n")
+                    f.write(f"  Confusion Matrix:\n")
                     f.write(f"    - TP (True Pos.):  {best_m['tp']}\n")
                     f.write(f"    - FP (False Pos.): {best_m['fp']}\n")
                     f.write(f"    - FN (False Neg.): {best_m['fn']}\n")
                     f.write(f"    - TN (True Neg.):  {best_m['tn']}\n")
                 else:
-                    f.write(f"  Sin datos suficientes para evaluar.\n")
+                    f.write(f"  Not enough data to evaluate.\n")
                 f.write("\n")
             f.write("="*50 + "\n")
 
@@ -1400,27 +1400,27 @@ def run_benchmark_execution(args, base_dir):
     else:
         methods = [args.method]
 
-    # Limpieza de caché opcional (CLI o interactiva)
+    # Optional cache clearing (CLI or interactive)
     if args.clear_cache:
         for m in methods:
             method_cache_dir = cache_dir / m
             if method_cache_dir.exists():
-                print(f"[Caché] Eliminando archivos de caché existentes para el método '{m}' en {method_cache_dir}...")
+                print(f"[Caché] Deleting existing cache files for method '{m}' en {method_cache_dir}...")
                 import shutil
                 shutil.rmtree(method_cache_dir)
-                print(f"[Caché] Eliminación completada para '{m}'.")
+                print(f"[Caché] Deletion completed for '{m}'.")
     else:
         any_cache_exists = any((cache_dir / m).exists() and (cache_dir / m).is_dir() and any((cache_dir / m).iterdir()) for m in methods)
         if any_cache_exists:
-            ans = input(f"\n¿Desea eliminar la caché existente para los métodos a evaluar antes de comenzar? (s/n): ").strip().lower()
+            ans = input(f"\nDo you want to delete the existing cache for the methods to evaluate before starting? (y/n): ").strip().lower()
             if ans in ['s', 'si', 'y', 'yes']:
                 for m in methods:
                     method_cache_dir = cache_dir / m
                     if method_cache_dir.exists():
-                        print(f"[Caché] Eliminando archivos de caché en {method_cache_dir}...")
+                        print(f"[Caché] Deleting cache files at {method_cache_dir}...")
                         import shutil
                         shutil.rmtree(method_cache_dir)
-                print("[Caché] Eliminación completada.")
+                print("[Caché] Deletion completed.")
 
     # Determinar datasets a procesar
     if args.dataset_dir == "all":
@@ -1442,7 +1442,7 @@ def run_benchmark_execution(args, base_dir):
         try:
             run_single_dataset_benchmark(dataset_dir, methods, args, base_dir, cache_dir)
         except Exception as e:
-            print(f"\nError al procesar el dataset '{dataset_dir.name}': {e}")
+            print(f"\nError processing dataset '{dataset_dir.name}': {e}")
 
 
 if __name__ == "__main__":

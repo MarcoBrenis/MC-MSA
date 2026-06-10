@@ -18,35 +18,35 @@ from melody_analysis_v2 import (
 def main():
     audio_path = "1.mp3"
     if not Path(audio_path).exists():
-        print(f"Error: {audio_path} no encontrado.")
+        print(f"Error: {audio_path} not found.")
         return
 
-    # 1. Configurar los 3 clasificadores
+    # 1. Configure the 3 classifiers
     c1 = MelodyClassifier()      # Original v2.5 (Caplin)
-    c2 = MelodyClassifierPaper() # Paper (Q/A estricto)
-    c3 = MelodyClassifierV1Rules() # Reglas v1.x (Portadas)
+    c2 = MelodyClassifierPaper() # Paper (Strict Q/A)
+    c3 = MelodyClassifierV1Rules() # Rules v1.x (Original MC-MSA)
 
-    clasificadores = [
-        ("Caplin (Original 2.5)", c1),
-        ("Paper (Pregunta/Respuesta)", c2),
-        ("Reglas v1.x (Original MC-MSA)", c3)
+    classifiers = [
+        ("Caplin (Original v2.5)", c1),
+        ("Paper (Question/Answer)", c2),
+        ("Rules v1.x (Original MC-MSA)", c3)
     ]
 
     output_dir = Path("salidas_comparativa_clasificadores")
     output_dir.mkdir(exist_ok=True)
 
-    # Analizar y graficar
-    fig, axes = plt.subplots(len(clasificadores), 1, figsize=(15, 4 * len(clasificadores)), sharex=True)
+    # Analyze and plot
+    fig, axes = plt.subplots(len(classifiers), 1, figsize=(15, 4 * len(classifiers)), sharex=True)
     
-    print(f"Iniciando comparativa para {audio_path}...")
+    print(f"Starting comparison for {audio_path}...")
 
-    for i, (name, clf) in enumerate(clasificadores):
-        print(f"Ejecutando: {name}")
+    for i, (name, clf) in enumerate(classifiers):
+        print(f"Running: {name}")
         analyzer = MelodyAnalyzer(classifier=clf)
         result = analyzer.analyze_file(audio_path)
         
-        # Usamos una versión modificada de plot_melody_contour o simplemente dibujamos en el eje
-        # Para esta comparativa, usaremos el helper directamente sobre el eje
+        # We use a modified version of plot_melody_contour or simply draw on the axis
+        # For this comparison, we will use the helper directly on the axis
         from melody_analysis_v2.visualization import _draw_segment_overlays, _get_plot_step
         
         ax = axes[i]
@@ -58,16 +58,16 @@ def main():
         ymax = float(np.nanmax(pitch)) if pitch.size else 60.0
         _draw_segment_overlays(ax, result.segments, ymax)
         
-        ax.set_title(f"Clasificador: {name}", fontsize=12, fontweight='bold')
-        ax.set_ylabel("Altura (MIDI)")
+        ax.set_title(f"Classifier: {name}", fontsize=12, fontweight='bold')
+        ax.set_ylabel("Pitch (MIDI)")
         ax.grid(True, alpha=0.3)
 
-    axes[-1].set_xlabel("Tiempo (s)")
+    axes[-1].set_xlabel("Time (s)")
     plt.tight_layout()
     
     save_path = output_dir / "comparativa_3_modelos.png"
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    print(f"\nComparativa guardada en: {save_path}")
+    print(f"\nComparison saved to: {save_path}")
     plt.close()
 
 if __name__ == "__main__":

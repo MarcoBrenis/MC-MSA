@@ -63,16 +63,16 @@ def pair_files_fuzzy(orig_files: dict, cover_files: dict):
                         best_orig_path = orig_path
                         
                 if best_orig_path is not None and best_overlap > 0.0:
-                    paired.append((best_orig_path, cov_path))
-                    used_origs.add(best_orig_path)
-                    
+                     paired.append((best_orig_path, cov_path))
+                     used_origs.add(best_orig_path)
+                     
     return paired
 
 def main():
-    print("=== Herramienta de Renombrado Inteligente de Datasets (Classical/Conciertos) ===")
+    print("=== Smart Dataset Renaming Tool (Classical/Concerts) ===")
     base_dir = Path(__file__).parent.absolute()
     
-    # 1. Encontrar datasets disponibles
+    # 1. Find available datasets
     datasets = []
     for item in base_dir.iterdir():
         if item.is_dir() and item.name.startswith("dataset_"):
@@ -80,22 +80,22 @@ def main():
                 datasets.append(item.name)
                 
     if not datasets:
-        print("No se encontraron carpetas con formato 'dataset_*' que contengan 'originales' y 'covers'.")
+        print("No folders matching 'dataset_*' containing 'originales' and 'covers' were found.")
         return
         
-    print("\nDatasets encontrados:")
+    print("\nDatasets found:")
     for i, ds in enumerate(datasets, 1):
         print(f"{i}. {ds}")
         
     while True:
         try:
-            choice = input(f"\nSeleccione el dataset a renombrar (1-{len(datasets)}): ").strip()
+            choice = input(f"\nSelect the dataset to rename (1-{len(datasets)}): ").strip()
             idx = int(choice) - 1
             if 0 <= idx < len(datasets):
                 selected_dataset = datasets[idx]
                 break
         except ValueError:
-            print("Selección no válida.")
+            print("Invalid selection.")
             
     dataset_dir = base_dir / selected_dataset
     orig_dir = dataset_dir / "originales"
@@ -104,36 +104,36 @@ def main():
     orig_files = get_audio_files(orig_dir)
     cover_files = get_audio_files(cover_dir)
     
-    print(f"\nCargando archivos de {selected_dataset}...")
-    print(f"Originales encontrados: {len(orig_files)}")
-    print(f"Covers encontrados: {len(cover_files)}")
+    print(f"\nLoading files from {selected_dataset}...")
+    print(f"Originals found: {len(orig_files)}")
+    print(f"Covers found: {len(cover_files)}")
     
     pairs = pair_files_fuzzy(orig_files, cover_files)
-    print(f"\nSe han detectado y emparejado automáticamente {len(pairs)} pares de archivos.")
+    print(f"\nAutomatically detected and matched {len(pairs)} pairs of files.")
     
     if len(pairs) == 0:
-        print("No se pudieron emparejar canciones. Saliendo.")
+        print("Could not match songs. Exiting.")
         return
         
-    # Mostrar una muestra de emparejamientos
-    print("\nMuestra de los primeros 5 emparejamientos:")
+    # Show a sample of matched pairs
+    print("\nSample of the first 5 matches:")
     for i, (op, cp) in enumerate(pairs[:5], 1):
-        print(f"  Pareja {i}:")
+        print(f"  Pair {i}:")
         print(f"    [Orig]: {op.name}")
         print(f"    [Cover]: {cp.name}")
         print("-" * 40)
         
-    confirm = input("\n¿Está seguro de que desea proceder con el renombrado? (s/N): ").strip().lower()
-    if confirm not in ['s', 'si', 'yes', 'y']:
-        print("Operación cancelada por el usuario.")
+    confirm = input("\nAre you sure you want to proceed with renaming? (y/N): ").strip().lower()
+    if confirm not in ['y', 'yes', 's', 'si']:
+        print("Operation cancelled by the user.")
         return
         
-    print("\nRenombrando archivos...")
+    print("\nRenaming files...")
     for i, (orig_path, cover_path) in enumerate(pairs, 1):
-        # Generar un prefijo de ID único de 2 o 3 dígitos según el tamaño
+        # Generate a unique 2 or 3 digit ID prefix depending on the size
         prefix = f"{i:02d}" if len(pairs) < 100 else f"{i:03d}"
         
-        # Eliminar el prefijo numérico antiguo si existía en el nombre original
+        # Remove old numeric prefix if it existed in the original name
         def clean_old_prefix(name: str):
             cleaned = re.sub(r'^\d+\s*[-_]?\s*', '', name)
             return cleaned
@@ -144,12 +144,12 @@ def main():
         new_orig_path = orig_path.parent / new_orig_name
         new_cover_path = cover_path.parent / new_cover_name
         
-        # Renombrar en disco
+        # Rename on disk
         os.rename(orig_path, new_orig_path)
         os.rename(cover_path, new_cover_path)
         
-    print("\n¡Renombrado inteligente completado exitosamente!")
-    print(f"Ahora puedes usar el dataset '{selected_dataset}' en el benchmark con total compatibilidad utilizando el ID Numérico (Opción 1).")
+    print("\nSmart renaming completed successfully!")
+    print(f"Now you can use the dataset '{selected_dataset}' in the benchmark with full compatibility using the Numeric ID (Option 1).")
 
 if __name__ == "__main__":
     main()

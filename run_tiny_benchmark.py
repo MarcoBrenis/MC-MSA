@@ -12,7 +12,7 @@ from src.melody_analysis_v2.classifier_paper import calculate_lcs
 from src.melody_analysis_v2.segmenter import MelodySegment
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
 
-# Reutilizamos las funciones de ploteo de run_benchmark
+# We reuse plotting functions from run_benchmark
 from run_benchmark import (
     plot_caplin_bands, 
     plot_caplin_contour,
@@ -54,32 +54,32 @@ def load_or_analyze(analyzer, file_path, method, cache_dir):
 
 def main():
     available_methods = ['all', 'pyin', 'melodia', 'crepe', 'ensemble', 'demucs_crepe', 'bs_roformer_rmvpe', 'rmvpe']
-    parser = argparse.ArgumentParser(description="Tiny Benchmark con soporte de método y caché.")
+    parser = argparse.ArgumentParser(description="Tiny Benchmark with method and cache support.")
     parser.add_argument("--method", type=str, default=None, 
                         choices=available_methods,
-                        help="Método de extracción a utilizar")
+                        help="Extraction method to use")
     args = parser.parse_args()
 
     if args.method is None:
-        print("\n=== Selección de Método de Extracción ===")
+        print("\n=== Extraction Method Selection ===")
         for i, m in enumerate(available_methods, 1):
             print(f"{i}. {m}")
         
         while True:
             try:
-                choice = input(f"\nSeleccione un método (1-{len(available_methods)}): ")
+                choice = input(f"\nSelect a method (1-{len(available_methods)}): ")
                 idx = int(choice) - 1
                 if 0 <= idx < len(available_methods):
                     args.method = available_methods[idx]
                     break
                 else:
-                    print(f"Error: Por favor seleccione un número entre 1 y {len(available_methods)}.")
+                    print(f"Error: Please select a number between 1 and {len(available_methods)}.")
             except ValueError:
-                # Si el usuario escribe el nombre del método directamente, también lo aceptamos
+                # If the user types the method name directly, we also accept it
                 if choice.strip().lower() in available_methods:
                     args.method = choice.strip().lower()
                     break
-                print("Error: Entrada no válida. Ingrese el número del método o el nombre.")
+                print("Error: Invalid input. Enter method number or name.")
 
     base_dir = Path(__file__).parent.absolute()
     dataset_dir = base_dir / "dataset_clei"
@@ -103,25 +103,25 @@ def main():
         methods = [args.method]
 
     classifier = MelodyClassifierPaper()
-    print(f"\nIniciando TINY BENCHMARK | Métodos: {methods}")
+    print(f"\nStarting TINY BENCHMARK | Methods: {methods}")
     
     for method in methods:
-        print(f"\n[{method}] Analizando...")
+        print(f"\n[{method}] Analyzing...")
         analyzer = MelodyAnalyzer(extraction_method=method, classifier=classifier)
         
         res_originals = {}
         total_p = len(common_ids)
         for i, uid in enumerate(common_ids, 1):
-            print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Cargando original: ID {uid}...", end='\r')
+            print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Loading original: ID {uid}...", end='\r')
             res_originals[uid] = load_or_analyze(analyzer, orig_files[uid], method, cache_dir)
-        print(f"\n  Originales cargados.")
+        print(f"\n  Originals loaded.")
         
         lcs_correct_list, dtw_correct_list, mrr_sum, top5_hits, valid_covers = [], [], 0.0, 0, 0
         best_lcs, best_uid, best_pair_res = -1.0, None, None
         detailed_results = []
         
         for i, uid_cover in enumerate(common_ids, 1):
-            print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Cargando cover: ID {uid_cover}...", end='\r')
+            print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Loading cover: ID {uid_cover}...", end='\r')
             res_cover = load_or_analyze(analyzer, cover_files[uid_cover], method, cache_dir)
             seq_cover = [s.label for s in res_cover.segments]
             
@@ -151,7 +151,7 @@ def main():
                     best_lcs = true_sim
                     best_uid = uid_cover
                     best_pair_res = (res_originals[uid_cover], res_cover)
-                    print(f"\n  [Mejor Match] ID {uid_cover} con LCS={best_lcs:.4f}. Generando gráficas completas...")
+                    print(f"\n  [Best Match] ID {uid_cover} with LCS={best_lcs:.4f}. Generating complete plots...")
                     out_dir = base_dir / "salidas_tiny_benchmark" / method
                     out_dir.mkdir(parents=True, exist_ok=True)
                     plot_caplin_bands(best_pair_res[0], best_pair_res[1], out_dir / "fig_qualitative_bands.pdf")
@@ -160,7 +160,7 @@ def main():
                     # Advanced Plots
                     try:
                         # Re-analyze to ensure we have novelty/ssm (not in cache)
-                        print(f"  Re-analizando best pair para obtener matrices de visualización...", end='\r')
+                        print(f"  Re-analyzing best pair to obtain visualization matrices...", end='\r')
                         res_orig_full = analyzer.analyze_file(str(orig_files[uid_cover]))
                         res_cover_full = analyzer.analyze_file(str(cover_files[uid_cover]))
                         
@@ -180,9 +180,9 @@ def main():
                             if audio is None or sr is None:
                                 audio, sr = librosa.load(path_audio, sr=22050)
                             plot_spectrogram_with_segments(audio, sr, res_f, output_path=out_dir / f"fig_spectrogram_{name}.pdf")
-                        print(f"  Gráficas completas generadas exitosamente.{" "*20}")
+                        print(f"  Complete plots generated successfully.{" "*20}")
                     except Exception as plot_err:
-                        print(f"\n  Advertencia al generar gráficas avanzadas: {plot_err}")
+                        print(f"\n  Warning generating advanced plots: {plot_err}")
                 
                 dtw_val = 0.0
                 pitch_o = res_originals[uid_cover].features.pitch_midi
@@ -201,30 +201,30 @@ def main():
         top5_prec = top5_hits / valid_covers if valid_covers > 0 else 0.0
         avg_dtw = np.mean(dtw_correct_list) if dtw_correct_list else 0.0
         
-        print(f"\n[{method}] Resumen | LCS: {avg_lcs:.4f} | MRR: {mrr:.4f} | Top5: {top5_prec:.1%} | DTW: {avg_dtw:.4f}")
+        print(f"\n[{method}] Summary | LCS: {avg_lcs:.4f} | MRR: {mrr:.4f} | Top5: {top5_prec:.1%} | DTW: {avg_dtw:.4f}")
         
-        # Reporte TXT Detallado
+        # Detailed TXT Report
         out_method_dir = base_dir / "salidas_tiny_benchmark" / method
         out_method_dir.mkdir(parents=True, exist_ok=True)
         report_path = out_method_dir / "reporte_detallado.txt"
         with open(report_path, 'w') as f:
-            f.write(f"REPORTE DETALLADO - TINY BENCHMARK - METODO: {method}\n")
+            f.write(f"DETAILED REPORT - TINY BENCHMARK - METHOD: {method}\n")
             f.write("="*50 + "\n")
             if best_uid is not None:
-                f.write(f"IMAGENES GENERADAS PARA EL MEJOR MATCH (LCS = {best_lcs:.4f}):\n")
+                f.write(f"IMAGES GENERATED FOR THE BEST MATCH (LCS = {best_lcs:.4f}):\n")
                 f.write(f"  ID: {best_uid}\n")
                 f.write(f"  Original: {orig_files[best_uid].name}\n")
                 f.write(f"  Cover:    {cover_files[best_uid].name}\n")
                 f.write("="*50 + "\n")
             f.write("\n".join(detailed_results) + "\n")
             f.write("="*50 + "\n")
-            f.write(f"RESUMEN:\n")
-            f.write(f"LCS Promedio: {avg_lcs:.4f}\n")
+            f.write(f"SUMMARY:\n")
+            f.write(f"Average LCS: {avg_lcs:.4f}\n")
             f.write(f"MRR:          {mrr:.4f}\n")
             f.write(f"Top-5 Prec.:  {top5_prec:.2%}\n")
-            f.write(f"DTW Promedio: {avg_dtw:.4f}\n")
+            f.write(f"Average DTW: {avg_dtw:.4f}\n")
         
-        print(f"\n[{method}] Finalizado.")
+        print(f"\n[{method}] Finished.")
 
 
 

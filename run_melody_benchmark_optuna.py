@@ -73,10 +73,10 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
 
     print("Métodos a evaluar:")
     for m in methods:
-        classification = METHOD_CLASSIFICATION.get(m, "Desconocido")
+        classification = METHOD_CLASSIFICATION.get(m, "Unknown")
         print(f"  - {m}: {classification}")
 
-    # Inicializar con el clasificador por defecto para cargar y poblar el caché
+    # Initialize with default classifier to load and populate cache
     default_classifier = MelodyClassifierPaper()
     
     summary_path = output_dir / "benchmark_summary.csv"
@@ -86,7 +86,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
             f.write("metodo,pares,lcs_promedio,mrr,top5_prec,top10_prec,dtw_promedio,min_voicing_thresh,slope_epsilon,energy_tau\n")
 
     for method in methods:
-        classification = METHOD_CLASSIFICATION.get(method, "Desconocido")
+        classification = METHOD_CLASSIFICATION.get(method, "Unknown")
         print(f"\n[{method}] Cargando/Poblando caché... ({classification})")
         analyzer = MelodyAnalyzer(extraction_method=method, classifier=default_classifier)
         
@@ -118,7 +118,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
                 res_covers[uid] = None
         print(f"  Covers cargados y cacheados.")
 
-        # --- FASE OPTUNA: CARGA LIGERA EN MEMORIA ---
+        # --- OPTUNA PHASE: LIGHTWEIGHT IN-MEMORY LOADING ---
         print("\nCargando características y segmentos desde la caché JSON para Optuna...")
         optuna_originals = {}
         optuna_covers = {}
@@ -156,7 +156,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
 
         print("Datos cargados en memoria. Iniciando optimización con Optuna...")
         
-        # Opciones de Optuna
+        # Optuna options
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         study = optuna.create_study(direction="maximize")
         
@@ -226,14 +226,14 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
             print(f"   - {k}: {v:.6f}")
         print("*"*60 + "\n")
         
-        # Instanciar el clasificador optimizado
+        # Instantiate the optimized classifier
         best_clf = MelodyClassifierPaper(
             min_voicing_thresh=best_params['min_voicing_thresh'],
             slope_epsilon=best_params['slope_epsilon'],
             energy_tau=best_params['energy_tau']
         )
         
-        # Re-clasificar en memoria los resultados para la evaluación final
+        # Re-classify results in memory for final evaluation
         for uid in common_ids:
             if res_originals[uid] is not None and optuna_originals[uid] is not None:
                 ann_orig = best_clf.classify(optuna_originals[uid]['features'], optuna_originals[uid]['segments'])
@@ -243,11 +243,11 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
                 ann_cover = best_clf.classify(optuna_covers[uid]['features'], optuna_covers[uid]['segments'])
                 res_covers[uid]['seq'] = [ann.label for ann in ann_cover]
 
-        # Liberar memoria de optuna antes de evaluar
+        # Free optuna memory before evaluating
         del optuna_originals, optuna_covers
         gc.collect()
 
-        # --- EVALUACIÓN FINAL DE RESULTADOS CON PARÁMETROS ÓPTIMOS ---
+        # --- FINAL EVALUATION OF RESULTS WITH OPTIMAL PARAMETERS ---
         print("Ejecutando evaluación final con los parámetros optimizados...")
         
         lcs_list, dtw_list, mrr_sum, top5_hits, top10_hits, valid_count = [], [], 0.0, 0, 0, 0
@@ -260,7 +260,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
         pairwise_dtw = []
         all_comparisons = []
 
-        # Cargar caché de comparaciones si existe
+        # Load comparisons cache if it exists
         comp_cache_path = cache_dir / method / f"comparison_cache_{dataset_dir.name}.json"
         comp_cache = {}
         comp_cache_changed = False
@@ -412,7 +412,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
                 if i % 10 == 0:
                     gc.collect()
                     
-        # Guardar caché de comparaciones si hubo cambios
+        # Save comparisons cache if there were changes
         if comp_cache_changed:
             try:
                 comp_cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -422,7 +422,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
             except Exception as e:
                 print(f"\n  [Caché] Advertencia al guardar caché de comparaciones: {e}")
 
-        # Métricas de resumen
+        # Summary metrics
         print(f"\n[{method}] Finalizado.")
         avg_lcs = np.mean(lcs_list) if lcs_list else 0
         mrr = mrr_sum / valid_count if valid_count else 0
@@ -432,24 +432,24 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
         
         print(f"[{method}] Resultados Óptimos | LCS: {avg_lcs:.4f} | MRR: {mrr:.4f} | Top5: {top5_prec:.2%} | Top10: {top10_prec:.2%} | DTW: {avg_dtw:.4f}")
         
-        # Exportar al CSV de resumen
+        # Export to summary CSV
         with open(summary_path, 'a') as f:
             f.write(f"{method}_optuna,{valid_count},{avg_lcs:.6f},{mrr:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f},{best_params['min_voicing_thresh']:.6f},{best_params['slope_epsilon']:.6f},{best_params['energy_tau']:.6f}\n")
             
-        # Evaluar clasificación binaria y umbrales óptimos
+        # Evaluate binary classification and optimal thresholds
         best_thresh_lcs, best_metrics_lcs, curves_lcs = evaluate_binary_classification(pairwise_lcs, "LCS")
         best_thresh_lev, best_metrics_lev, curves_lev = evaluate_binary_classification(pairwise_lev, "Levenshtein")
         best_thresh_ph, best_metrics_ph, curves_ph = evaluate_binary_classification(pairwise_pitch_hist, "Pitch Histogram")
         best_thresh_dtw, best_metrics_dtw, curves_dtw = evaluate_binary_classification(pairwise_dtw, "DTW", lower_is_better=True)
         
-        # Exportar comparativas_todas.csv
+        # Export comparativas_todas.csv
         comp_csv_path = out_method_dir / "comparativas_todas.csv"
         with open(comp_csv_path, 'w') as f:
             f.write("cover_id,original_id,lcs_similarity,levenshtein_similarity,pitch_hist_similarity,dtw_distance,is_correct\n")
             for comp in all_comparisons:
                 f.write(f"{comp['cover_id']},{comp['original_id']},{comp['lcs_similarity']:.6f},{comp['levenshtein_similarity']:.6f},{comp['pitch_hist_similarity']:.6f},{comp['dtw_distance']},{comp['is_correct']}\n")
                 
-        # Exportar curvas de umbrales
+        # Export threshold curves
         for m_name, curves in [("lcs", curves_lcs), ("levenshtein", curves_lev), ("pitch_hist", curves_ph), ("dtw", curves_dtw)]:
             if not curves: continue
             curve_csv_path = out_method_dir / f"analisis_umbrales_{m_name}.csv"
@@ -458,7 +458,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
                 for c in curves:
                     f.write(f"{c['threshold']:.4f},{c['tp']},{c['fp']},{c['fn']},{c['tn']},{c['precision']:.6f},{c['recall']:.6f},{c['f1_score']:.6f},{c['accuracy']:.6f}\n")
         
-        # Exportar reporte detallado TXT
+        # Export detailed report TXT
         report_path = out_method_dir / "reporte_detallado.txt"
         with open(report_path, 'w') as f:
             f.write(f"REPORTE DETALLADO (OPTIMIZADO CON OPTUNA) - METODO: {method}\n")
@@ -509,10 +509,10 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
                 f.write("\n")
             f.write("="*50 + "\n")
 
-        # Re-inicializar el analizador principal con el mejor clasificador para las gráficas
+        # Re-initialize primary analyzer with best classifier for plotting
         analyzer = MelodyAnalyzer(extraction_method=method, classifier=best_clf)
 
-        # Gráficas Cualitativas para el mejor match de este método
+        # Qualitative plots for the best match of this method
         if best_uid is not None:
             print(f"\n[{method}] Generando gráficas cualitativas finales usando el clasificador optimizado (Mejor Match ID {best_uid})...")
             try:
@@ -529,7 +529,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
                 print(f"  Procesando Original (ID {best_uid})...")
                 res_orig_best = analyzer.analyze_file(str(orig_files[best_uid]))
                 
-                # Novelty, SSM, Contornos
+                # Novelty, SSM, Contours
                 plot_boundary_detection(res_orig_best, output_path=out_method_dir / "fig_novelty_orig.png", title=f"Boundary Detection (Original)\nSong: {title_orig}")
                 if res_orig_best.self_similarity is not None:
                     plot_self_similarity(res_orig_best, output_path=out_method_dir / "fig_ssm_orig.png", title=f"SSM (Original)\nSong: {title_orig}")
@@ -552,7 +552,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
                 print(f"  Procesando Cover (ID {best_uid})...")
                 res_cover_best = analyzer.analyze_file(str(cover_files[best_uid]))
                 
-                # Novelty, SSM, Contornos
+                # Novelty, SSM, Contours
                 plot_boundary_detection(res_cover_best, output_path=out_method_dir / "fig_novelty_cover.png", title=f"Boundary Detection (Cover)\nSong: {title_cover}")
                 if res_cover_best.self_similarity is not None:
                     plot_self_similarity(res_cover_best, output_path=out_method_dir / "fig_ssm_cover.png", title=f"SSM (Cover)\nSong: {title_cover}")
@@ -572,14 +572,14 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
                 
                 plt.close('all')
                 
-                # Gráficas Compartidas (Bandas y Contornos de Caplin)
+                # Shared Plots (Caplin Bands and Contours)
                 plot_caplin_bands(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_bands.png", meta_orig=meta_orig, meta_cover=meta_cover)
                 plot_caplin_contour(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_contour.png", meta_orig=meta_orig, meta_cover=meta_cover)
                 plot_contour_only_comparison(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_contour_only.png", meta_orig=meta_orig, meta_cover=meta_cover)
                 plot_energy_only_comparison(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_energy_only.png", meta_orig=meta_orig, meta_cover=meta_cover)
                 plot_melody_and_energy_comparison(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_contour_and_energy.png", meta_orig=meta_orig, meta_cover=meta_cover)
                 
-                # Exportar los 9 pasos del diagrama para el Mejor Match
+                # Export 9 diagram steps for Best Match
                 print(f"  Exportando 9 pasos del diagrama para el Mejor Match (ID {best_uid})...")
                 exporter_orig = DiagramExporter(out_method_dir / "diagrama_pasos_original")
                 exporter_orig.export_all(str(orig_files[best_uid]), method=method)
@@ -597,7 +597,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
                 plt.close('all')
                 gc.collect()
 
-    # Guardar tabla comparativa consolidada
+    # Save consolidated comparative table
     save_dataset_comparative_table(dataset_dir, output_dir)
 
 def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
@@ -712,7 +712,7 @@ def main():
 
     base_dir = Path(__file__).parent.absolute()
 
-    # Selección de Dataset interactiva si no se define por CLI
+    # Interactive Dataset selection if not defined via CLI
     if args.dataset_dir is None:
         datasets = find_available_datasets(base_dir)
         if not datasets:
@@ -752,7 +752,7 @@ def main():
                         break
                     print("Error: Entrada no válida.")
 
-    # Selección de Método interactiva si no se define por CLI
+    # Interactive Method selection if not defined via CLI
     if args.method is None:
         print("\n=== Selección de Método de Extracción (Optuna) ===")
         f0_methods = ['pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0']
@@ -811,7 +811,7 @@ def main():
                     break
                 print("Error: Entrada no válida.")
 
-    # Selección de Emparejamiento interactiva si no se define por CLI
+    # Interactive Matching selection if not defined via CLI
     if args.match_mode is None:
         print("\n=== Selección de Método de Emparejamiento (Optuna) ===")
         print("1. Por ID Numérico (ej: '01 - Pedro Infante.wav' con '01 - Cover.mp3')")
@@ -853,7 +853,7 @@ def main():
     else:
         methods = [args.method]
 
-    # Limpieza de caché opcional
+    # Optional cache clearing
     if args.clear_cache:
         for m in methods:
             method_cache_dir = cache_dir / m
@@ -873,7 +873,7 @@ def main():
                         shutil.rmtree(method_cache_dir)
                 print("[Caché] Eliminación completada.")
 
-    # Determinar datasets a procesar
+    # Determine datasets to process
     if args.dataset_dir == "all":
         datasets_to_process = []
         datasets_names = find_available_datasets(base_dir)
@@ -888,7 +888,7 @@ def main():
             path = base_dir / path
         datasets_to_process = [path]
 
-    # Procesar cada dataset
+    # Process each dataset
     for dataset_dir in datasets_to_process:
         try:
             run_single_dataset_optuna_benchmark(dataset_dir, methods, args, base_dir, cache_dir)

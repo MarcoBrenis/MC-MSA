@@ -37,10 +37,10 @@ def get_audio_files_by_id(directory_path: Path):
     return result
 
 def main():
-    parser = argparse.ArgumentParser(description="Generar visualizaciones completas para un par de canciones específico.")
-    parser.add_argument("id", type=int, help="ID de la canción (ej: 01, 05, 80)")
-    parser.add_argument("--method", type=str, default="crepe", help="Método de extracción (crepe, rmvpe, bs_roformer, etc.)")
-    parser.add_argument("--output_dir", type=str, default="salidas_visualizacion", help="Directorio de salida")
+    parser = argparse.ArgumentParser(description="Generate complete visualizations for a specific song pair.")
+    parser.add_argument("id", type=int, help="Song ID (e.g. 01, 05, 80)")
+    parser.add_argument("--method", type=str, default="crepe", help="Extraction method (crepe, rmvpe, bs_roformer, etc.)")
+    parser.add_argument("--output_dir", type=str, default="salidas_visualizacion", help="Output directory")
     
     args = parser.parse_args()
     
@@ -50,17 +50,17 @@ def main():
     cover_dir = dataset_dir / "covers"
     
     if not orig_dir.exists() or not cover_dir.exists():
-        print("Error: No se encontraron las carpetas de dataset_clei.")
+        print("Error: dataset_clei folders not found.")
         return
         
     orig_files = get_audio_files_by_id(orig_dir)
     cover_files = get_audio_files_by_id(cover_dir)
     
     if args.id not in orig_files or args.id not in cover_files:
-        print(f"Error: No se encontró el ID {args.id} en originales o covers.")
+        print(f"Error: ID {args.id} not found in originals or covers.")
         return
         
-    print(f"Procesando ID {args.id} con el método {args.method}...")
+    print(f"Processing ID {args.id} with method {args.method}...")
     
     classifier = MelodyClassifierPaper()
     analyzer = MelodyAnalyzer(extraction_method=args.method, classifier=classifier)
@@ -71,7 +71,7 @@ def main():
     res_dict = {}
     meta_dict = {}
     for name, path in [("original", orig_files[args.id]), ("cover", cover_files[args.id])]:
-        print(f"  Analizando {name}: {path.name}...")
+        print(f"  Analyzing {name}: {path.name}...")
         res = analyzer.analyze_file(str(path))
         res_dict[name] = res
         
@@ -99,23 +99,23 @@ def main():
         try:
             plot_boundary_detection(res, output_path=out_dir / f"novelty_{name}.png", title=f"Boundary Detection ({name.capitalize()})\nSong: {title_str}")
         except Exception as e:
-            print(f"    Advertencia (Novedad): {e}")
+            print(f"    Warning (Novelty): {e}")
             
         # 4. SSM
         try:
             plot_self_similarity(res, output_path=out_dir / f"ssm_{name}.png", title=f"SSM ({name.capitalize()})\nSong: {title_str}")
         except Exception as e:
-            print(f"    Advertencia (SSM): {e}")
+            print(f"    Warning (SSM): {e}")
             
         # 5. Spectrogram
         try:
             audio, sr = librosa.load(path, sr=analyzer.sample_rate)
             plot_spectrogram_with_segments(audio, sr, res, output_path=out_dir / f"spectrogram_{name}.png", title=f"Spectrogram with Segments ({name.capitalize()})\nSong: {title_str}")
         except Exception as e:
-            print(f"    Advertencia (Espectrograma): {e}")
+            print(f"    Warning (Spectrogram): {e}")
             
     # Shared/Comparative plots
-    print("  Generando gráficos comparativos...")
+    print("  Generating comparative plots...")
     try:
         plot_caplin_bands(res_dict["original"], res_dict["cover"], out_dir / "fig_qualitative_bands.png", meta_orig=meta_dict["original"], meta_cover=meta_dict["cover"])
         plot_caplin_contour(res_dict["original"], res_dict["cover"], out_dir / "fig_qualitative_contour.png", meta_orig=meta_dict["original"], meta_cover=meta_dict["cover"])
@@ -123,9 +123,9 @@ def main():
         plot_energy_only_comparison(res_dict["original"], res_dict["cover"], out_dir / "fig_qualitative_energy_only.png", meta_orig=meta_dict["original"], meta_cover=meta_dict["cover"])
         plot_melody_and_energy_comparison(res_dict["original"], res_dict["cover"], out_dir / "fig_qualitative_contour_and_energy.png", meta_orig=meta_dict["original"], meta_cover=meta_dict["cover"])
     except Exception as e:
-        print(f"  Advertencia (Gráficos Comparativos): {e}")
+        print(f"  Warning (Comparative Plots): {e}")
         
-    print(f"\nVisualizaciones generadas en: {out_dir}")
+    print(f"\nVisualizations generated at: {out_dir}")
 
 if __name__ == "__main__":
     main()

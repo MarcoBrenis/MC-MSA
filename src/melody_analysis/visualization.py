@@ -145,7 +145,7 @@ def plot_melody_only(
     ax.set_xlabel("Tiempo (s)")
     ax.set_ylabel("Pitch (MIDI)")
 
-    # Eje secundario para f0 en Hz
+    # Secondary axis for f0 in Hz
     ax_hz = ax.twinx()
     ax_hz.plot(times, f0_hz, label="f0 (Hz)", color="tab:red", alpha=0.5)
     ax_hz.set_ylabel("f0 (Hz)", color="tab:red")
@@ -340,7 +340,7 @@ def plot_melody_contour(
     ax2.set_ylabel("Energía normalizada", color="tab:green")
     ax2.tick_params(axis="y", labelcolor="tab:green")
 
-    # Mostrar f0 en Hz en un tercer eje para evitar solapamientos
+    # Show f0 in Hz on a third axis to avoid overlaps
     ax3 = ax1.twinx()
     ax3.spines["right"].set_position(("axes", 1.1))
     ax3.plot(times, f0_hz, label="f0 (Hz)", color="tab:red", alpha=0.5)
@@ -404,7 +404,7 @@ def plot_spectrogram_with_segments(
     )
     fig.colorbar(img, ax=ax, format="%.0f dB", label="Intensidad")
 
-    # Trazar f0 sobre el eje mel para ubicar la fundamental
+    # Plot f0 over the mel axis to locate the fundamental
     f0_hz = _midi_to_hz(result.features.pitch_midi)
     f0_mel = librosa.hz_to_mel(f0_hz)
     ax.plot(result.features.times, f0_mel, color="white", linewidth=1.5, alpha=0.9, label="f0")
