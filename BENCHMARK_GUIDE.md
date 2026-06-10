@@ -1,0 +1,117 @@
+# MC-MSA v2.5: Melody Extraction & Benchmarking Guide
+
+This user guide provides details on using the benchmarking suite of the **MC-MSA v2.5** framework. The benchmark evaluates melody extraction methods (F0 estimation, vocal separation hybrids, and symbolic estimators) on Cover Song Identification (CSI) tasks using Information Retrieval (IR) metrics.
+
+---
+
+## 1. Directory & Dataset Structure
+
+The benchmark dynamically detects dataset folders in the workspace that prefix with `dataset_` (e.g., `dataset_OA`, `dataset_Acad`, `dataset_JJCC`).
+
+Each dataset folder must contain two subdirectories:
+* **`originales/`**: The reference/original audio tracks.
+* **`covers/`**: The target cover versions.
+
+### Matching Modes
+When running the benchmark, you can select how tracks are paired between `originales/` and `covers/`:
+1. **`id` (Numeric ID Prefix - Default)**: Pairs tracks starting with the same number (e.g., `04 - Song A.mp3` matches `04 - Cover.wav`).
+2. **`stem` (Exact Name)**: Matches normalized file names.
+3. **`fuzzy` (Smart/Fuzzy Match)**: Utilizes word-overlap calculations for complex naming schemes or classical metadata.
+
+---
+
+## 2. Core Benchmarking Scripts
+
+### A. Full Melody Extraction Benchmark (`run_melody_benchmark.py`)
+This is the main runner. It iterates through the dataset, extracts melodic contours using the selected method(s), performs segmentation/classification, and calculates retrieval metrics.
+
+* **Usage**:
+  ```bash
+  python run_melody_benchmark.py
+  ```
+* **Arguments**:
+  * `--method`: Extraction method to evaluate (e.g., `pyin`, `crepe`, `demucs_crepe`, `bs_roformer_rmvpe`, `all`, etc.).
+  * `--dataset_dir`: Name or absolute path of the dataset folder (e.g., `dataset_OA`).
+  * `--match_mode`: Pairing mode (`id`, `stem`, or `fuzzy`).
+  * `--cache_dir`: Directory for caching segmentations (`default: cache`).
+  * `--clear_cache`: Clear cached data for the selected method before starting.
+  * `--dtw_all_pairs`: Calculate Dynamic Time Warping (DTW) for all pairs (Warning: computationally expensive).
+
+---
+
+### B. Hyperparameter Optimization (`run_melody_benchmark_optuna.py`)
+Optimizes the parameters of `MelodyClassifierPaper` (voicing threshold, slope epsilon, energy tau) using **Optuna** to maximize the Mean Reciprocal Rank (MRR) or Longest Common Subsequence (LCS) similarity.
+
+* **Usage**:
+  ```bash
+  python run_melody_benchmark_optuna.py --dataset_dir dataset_OA --method pyin
+  ```
+* **Notes**:
+  * Leverages cached features to run thousands of parameter trials in-memory in seconds.
+  * Outputs the optimized parameters to `resultados_benchmark_optuna/benchmark_summary.csv`.
+
+---
+
+### C. Fast Recalculation of Metrics (`run_metrics_only.py`)
+Recalculates all IR metrics and regenerates report tables **instantaneously** from cached analysis files without reprocessing the audio signals. Use this after changing metric definitions or to review summary tables.
+
+* **Usage**:
+  ```bash
+  python run_metrics_only.py
+  ```
+* **Arguments**:
+  * `--dataset_dir`: Target dataset folder.
+  * `--method`: Recalculate a specific method or `all` available methods in the cache.
+  * `--optuna`: Recalculate metrics using the Optuna-optimized results.
+
+---
+
+### D. Tiny Benchmark Runner (`run_tiny_benchmark.py`)
+A lightweight script designed for testing or debugging. It executes the analysis pipeline on a subset of two song pairs (IDs 02 and 04) and generates full comparative and qualitative figures.
+
+* **Usage**:
+  ```bash
+  python run_tiny_benchmark.py --method pyin
+  ```
+* **Outputs**:
+  * `salidas_tiny_benchmark/<method>/reporte_detallado.txt`: English performance summary.
+  * `fig_qualitative_bands.pdf` & `fig_qualitative_contour.pdf`: Segment comparisons.
+  * Spectrograms, novelty curves, and self-similarity matrices (SSM) for the best match.
+
+---
+
+## 3. Caching & Memory Management
+
+To support large datasets (70+ pairs) on consumer hardware without Out-Of-Memory (OOM) crashes:
+* **Audio Delegation**: Computational tasks are processed via isolated subprocesses (`analyze_single.py`) to prevent RAM leaks from TensorFlow/PyTorch runtimes.
+* **Feature Caching**: Melody sequences and pitch arrays are stored in `cache/<method>/` as lightweight `.json` files.
+* **Separation Cache**: Extracted vocals from Demucs or BS-Roformer are cached as `.npy` arrays inside `src/melody_analysis_v2/.vocal_cache/` to avoid repeated source separation.
+
+---
+
+## 4. Evaluation Metrics
+
+The benchmarks calculate the following Information Retrieval metrics:
+* **LCS (%)**: Longest Common Subsequence normalized similarity.
+* **MR**: Mean Rank of the correct match (lower is better).
+* **MDR**: Median Rank of the correct match (lower is better).
+* **MRR (%)**: Mean Reciprocal Rank (primary metric, higher is better).
+* **MAP (%)**: Mean Average Precision.
+* **Top-5 / Top-10 (%)**: Percentage of targets found in the top 5 or 10 ranks.
+* **DTW**: Average Dynamic Time Warping distance between pitch contours.
+
+---
+
+## 5. Setup & Optional Packages
+
+Ensure you have installed all required libraries. To install the complete stack including deep learning modules and Optuna, run:
+```bash
+pip install -e .[advanced,optuna]
+```
+
+### Supported Extraction Methods
+* **Basic Pitch**: Spotify's lightweight polyphonic transcription.
+* **BS-Roformer + RMVPE**: High-fidelity vocal extraction combined with robust CNN-based pitch estimation (Apple Silicon MPS / Nvidia CUDA accelerated).
+* **Demucs + CREPE**: Traditional hybrid source separation and deep F0 tracking.
+* **Melodia**: Melodic salience algorithm.
+* **pYIN / YIN**: Classic DSP pitch tracking.
