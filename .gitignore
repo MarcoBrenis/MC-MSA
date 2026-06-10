@@ -1,0 +1,68 @@
+# Python files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs & System files
+.vscode/
+.idea/
+.DS_Store
+
+# Benchmark Cache and Temp Data
+cache/
+cache_melody_test/
+cache_tiny/
+.pytest_cache/
+
+# Audio files
+*.mp3
+*.wav
+*.m4a
+*.flac
+
+# Benchmark Results / Outputs
+salidas_*/
+test_vis*/
+resultados_*/
+resultados_benchmark/
+resultados_benchmark_optuna/
+tabla_academica.tex
+tabla_popular.tex
+pdf_text.txt
+
+# Datasets
+dataset_*/
+dataset_academico.*
+dataset_popular.*
+
+# Large Model Files / Checkpoints
+*.ckpt
+*.onnx
+models/
+
+# Vocal Separation Cache
+.vocal_cache/
+
