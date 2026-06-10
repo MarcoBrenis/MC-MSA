@@ -19,6 +19,17 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+optuna = ["optuna"]
+advanced = [
+    "torch",
+    "torchaudio",
+    "demucs",
+    "onnxruntime",
+    "basic-pitch",
+    "bs-roformer-infer",
+    "ml-collections",
+    "pyyaml",
+]
 
 [tool.pytest.ini_options]
 addopts = "-q"
