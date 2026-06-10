@@ -185,100 +185,154 @@ def extraer_dataset_a_csv(dir_dataset, es_academico, ruta_csv):
         tags_orig = parse_id3v2(f)
         tags_cover = parse_id3v2(f_cover) if f_cover else {}
         
-        year = tags_orig.get('year')
-        if not year:
+        # Original release year
+        year_orig = tags_orig.get('year')
+        if not year_orig:
             m_year = re.search(r'\b(19\d\d|20\d\d)\b', f.name)
-            year = m_year.group(1) if m_year else "Unknown"
+            year_orig = m_year.group(1) if m_year else "Unknown"
             
+        # Cover release year
+        year_cover = tags_cover.get('year')
+        if not year_cover and f_cover:
+            m_year_cov = re.search(r'\b(19\d\d|20\d\d)\b', f_cover.name)
+            year_cover = m_year_cov.group(1) if m_year_cov else "Unknown"
+        elif not f_cover:
+            year_cover = "N/A"
+            
+        # Parse titles and artists
         if es_academico:
-            author = detect_composer(f.name, tags_orig) or "Unknown"
+            work_artist = detect_composer(f.name, tags_orig) or "Unknown"
             
-            title = tags_orig.get('title')
-            if title:
-                title = clean_classical_title(title, author)
+            # Original title (work title and performance title are similar)
+            title_orig = tags_orig.get('title')
+            if title_orig:
+                title_orig = clean_classical_title(title_orig, work_artist)
             else:
                 cleaned_name = re.sub(r'^\d+\s*-\s*', '', f.name)
                 cleaned_name = re.sub(r'\s*\((Remastered|Recorded)\s+\d{4}\)', '', cleaned_name)
                 cleaned_name = re.sub(r'\.(mp3|wav)$', '', cleaned_name, flags=re.IGNORECASE)
-                if author != "Unknown":
-                    cleaned_name = re.sub(rf'\s*_\s*{author}\s*_\s*', ': ', cleaned_name, flags=re.IGNORECASE)
-                title = cleaned_name.replace('_', ' ').replace('  ', ' ').strip()
-        else:
-            author = tags_orig.get('artist')
-            title = tags_orig.get('title')
+                if work_artist != "Unknown":
+                    cleaned_name = re.sub(rf'\s*_\s*{work_artist}\s*_\s*', ': ', cleaned_name, flags=re.IGNORECASE)
+                title_orig = cleaned_name.replace('_', ' ').replace('  ', ' ').strip()
+                
+            work_title = title_orig
+            performance_title_orig = title_orig
             
-            if not author or not title:
+            # Cover title
+            if f_cover:
+                title_cover = tags_cover.get('title')
+                if title_cover:
+                    title_cover = clean_classical_title(title_cover, work_artist)
+                else:
+                    cleaned_name = re.sub(r'^\d+\s*-\s*', '', f_cover.name)
+                    cleaned_name = re.sub(r'\s*\((Remastered|Recorded)\s+\d{4}\)', '', cleaned_name)
+                    cleaned_name = re.sub(r'\.(mp3|wav)$', '', cleaned_name, flags=re.IGNORECASE)
+                    if work_artist != "Unknown":
+                        cleaned_name = re.sub(rf'\s*_\s*{work_artist}\s*_\s*', ': ', cleaned_name, flags=re.IGNORECASE)
+                    title_cover = cleaned_name.replace('_', ' ').replace('  ', ' ').strip()
+                performance_title_cover = title_cover
+            else:
+                performance_title_cover = "N/A"
+        else:
+            work_artist = tags_orig.get('artist')
+            work_title = tags_orig.get('title')
+            
+            if not work_artist or not work_title:
                 m_pop = pattern_pop.match(f.name)
                 if m_pop:
                     _, parsed_artist, parsed_title, _ = m_pop.groups()
-                    author = author or parsed_artist
-                    title = title or parsed_title
+                    work_artist = work_artist or parsed_artist
+                    work_title = work_title or parsed_title
                 else:
                     cleaned_name = re.sub(r'^\d+\s*-\s*', '', f.name)
                     cleaned_name = re.sub(r'\.(mp3|wav)$', '', cleaned_name, flags=re.IGNORECASE)
                     parts = cleaned_name.split(' - ')
                     if len(parts) >= 2:
-                        author = author or parts[0]
-                        title = title or ' - '.join(parts[1:])
+                        work_artist = work_artist or parts[0]
+                        work_title = work_title or ' - '.join(parts[1:])
                     else:
-                        author = author or "Unknown"
-                        title = title or cleaned_name
+                        work_artist = work_artist or "Unknown"
+                        work_title = work_title or cleaned_name
             
-        orig_interpreter = tags_orig.get('artist')
-        if not orig_interpreter:
-            orig_interpreter = author
-        orig_interpreter = clean_artist_list(orig_interpreter)
+            performance_title_orig = work_title
+            if f_cover:
+                title_cov = tags_cover.get('title')
+                if not title_cov:
+                    m_cover = pattern_pop.match(f_cover.name)
+                    if m_cover:
+                        title_cov = m_cover.group(3)
+                    else:
+                        cleaned_name = re.sub(r'^\d+\s*-\s*', '', f_cover.name)
+                        cleaned_name = re.sub(r'\.(mp3|wav)$', '', cleaned_name, flags=re.IGNORECASE)
+                        parts = cleaned_name.split(' - ')
+                        if len(parts) >= 2:
+                            title_cov = ' - '.join(parts[1:])
+                        else:
+                            title_cov = cleaned_name
+                performance_title_cover = title_cov or work_title
+            else:
+                performance_title_cover = "N/A"
+                
+        # Original performer
+        performance_artist_orig = tags_orig.get('artist')
+        if not performance_artist_orig:
+            performance_artist_orig = work_artist
+        performance_artist_orig = clean_artist_list(performance_artist_orig)
         
-        cover_interpreter = "Unknown"
+        # Cover performer
+        performance_artist_cover = "Unknown"
         if f_cover:
-            cover_interpreter = tags_cover.get('artist')
-            if not cover_interpreter:
+            performance_artist_cover = tags_cover.get('artist')
+            if not performance_artist_cover:
                 m_cover = pattern_pop.match(f_cover.name)
                 if m_cover:
                     _, parsed_interpreter, _, _ = m_cover.groups()
-                    cover_interpreter = parsed_interpreter
+                    performance_artist_cover = parsed_interpreter
                 else:
                     cleaned_name = re.sub(r'^\d+\s*-\s*', '', f_cover.name)
                     cleaned_name = re.sub(r'\.(mp3|wav)$', '', cleaned_name, flags=re.IGNORECASE)
                     parts = cleaned_name.split(' - ')
                     if len(parts) >= 2:
-                        cover_interpreter = parts[0]
+                        performance_artist_cover = parts[0]
                     else:
-                        cover_interpreter = cleaned_name
+                        performance_artist_cover = cleaned_name
                         
-        cover_interpreter = clean_artist_list(cover_interpreter)
+        performance_artist_cover = clean_artist_list(performance_artist_cover)
         
+        # Append original row
+        rows.append({
+            'track_id': track,
+            'type': 'original',
+            'performance title': performance_title_orig,
+            'performance artist': performance_artist_orig,
+            'work title': work_title,
+            'work artist': work_artist,
+            'release year': year_orig
+        })
+        
+        # Append cover row if cover exists
+        if f_cover:
+            rows.append({
+                'track_id': track,
+                'type': 'cover',
+                'performance title': performance_title_cover,
+                'performance artist': performance_artist_cover,
+                'work title': work_title,
+                'work artist': work_artist,
+                'release year': year_cover
+            })
+            
         if es_academico:
-            rows.append({
-                'Pista': track,
-                'Cancion': title,
-                'Autor': author,
-                'Original': orig_interpreter,
-                'Cover': cover_interpreter,
-                'Anio': year
-            })
-            clean_txt_lines.append(f"{title} - {author} - {orig_interpreter} - {cover_interpreter}")
+            clean_txt_lines.append(f"{work_title} - {work_artist} - {performance_artist_orig} - {performance_artist_cover}")
         else:
-            rows.append({
-                'Pista': track,
-                'Cancion': title,
-                'Original': orig_interpreter,
-                'Cover': cover_interpreter,
-                'Anio': year
-            })
-            clean_txt_lines.append(f"{title} - {orig_interpreter} - {cover_interpreter}")
+            clean_txt_lines.append(f"{work_title} - {performance_artist_orig} - {performance_artist_cover}")
             
     with open(ruta_csv, mode='w', encoding='utf-8', newline='') as csvfile:
-        if es_academico:
-            fieldnames = ['Pista', 'Cancion', 'Autor', 'Original', 'Cover', 'Anio']
-        else:
-            fieldnames = ['Pista', 'Cancion', 'Original', 'Cover', 'Anio']
-            
+        fieldnames = ['track_id', 'type', 'performance title', 'performance artist', 'work title', 'work artist', 'release year']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         for r in rows:
-            row_to_write = {k: r[k] for k in fieldnames if k in r}
-            writer.writerow(row_to_write)
+            writer.writerow(r)
             
     ruta_txt = Path(ruta_csv).with_suffix('.txt')
     with open(ruta_txt, mode='w', encoding='utf-8') as txtfile:
@@ -298,18 +352,14 @@ def extraer_dataset_a_csv(dir_dataset, es_academico, ruta_csv):
 
 def generar_tabla_latex(ruta_csv, ruta_salida, titulo_seccion, etiqueta_tabla, descripcion):
     """
-    Reads a CSV file and generates the complete LaTeX code.
-    If the CSV contains the 'Autor' column (Academic), generates a 4-column table.
-    Otherwise (Popular), generates a 3-column table.
+    Reads the new structured CSV file and generates LaTeX code.
+    Groups tracks by track_id to output one paired row per track.
     """
     if not os.path.exists(ruta_csv):
         print(f"Error: File not found {ruta_csv}")
         return
 
-    # Read headers to detect if 'Autor' is present
-    with open(ruta_csv, mode='r', encoding='utf-8') as archivo_csv:
-        lector = csv.DictReader(archivo_csv)
-        tiene_autor = 'Autor' in lector.fieldnames
+    tiene_autor = "academic" in etiqueta_tabla or "acad" in ruta_csv.lower()
 
     if tiene_autor:
         latex_code = f"""\\section{{{titulo_seccion}}}
@@ -370,19 +420,31 @@ def generar_tabla_latex(ruta_csv, ruta_salida, titulo_seccion, etiqueta_tabla, d
 
 """
 
+    # Group by track_id
+    tracks_data = {}
     with open(ruta_csv, mode='r', encoding='utf-8') as archivo_csv:
         lector = csv.DictReader(archivo_csv)
-        
         for fila in lector:
-            cancion = escapar_latex(fila.get('Cancion', 'Unknown'))
-            original = escapar_latex(fila.get('Original', 'Unknown'))
-            cover = escapar_latex(fila.get('Cover', 'Unknown'))
-            
-            if tiene_autor:
-                autor = escapar_latex(fila.get('Autor', 'Unknown'))
-                latex_code += f"{cancion} & {autor} & {original} & {cover} \\\\\n"
-            else:
-                latex_code += f"{cancion} & {original} & {cover} \\\\\n"
+            tid = fila.get('track_id')
+            ttype = fila.get('type')
+            if tid not in tracks_data:
+                tracks_data[tid] = {}
+            tracks_data[tid][ttype] = fila
+
+    for tid in sorted(tracks_data.keys()):
+        pair = tracks_data[tid]
+        orig_row = pair.get('original', {})
+        cover_row = pair.get('cover', {})
+        
+        work_title = escapar_latex(orig_row.get('work title', 'Unknown'))
+        work_artist = escapar_latex(orig_row.get('work artist', 'Unknown'))
+        orig_perf = escapar_latex(orig_row.get('performance artist', 'Unknown'))
+        cover_perf = escapar_latex(cover_row.get('performance artist', 'Unknown'))
+        
+        if tiene_autor:
+            latex_code += f"{work_title} & {work_artist} & {orig_perf} & {cover_perf} \\\\\n"
+        else:
+            latex_code += f"{work_title} & {orig_perf} & {cover_perf} \\\\\n"
 
     latex_code += "\n\\end{longtable}\n\n"
     
@@ -449,7 +511,7 @@ def procesar_predeterminados(base_path):
     # --- ACADEMIC CORPUS ---
     dir_academico = base_path / "dataset_Acad"
     print(f"\nProcessing Academic Corpus from: {dir_academico.name}...")
-    academico_ok = extraer_dataset_a_csv(dir_academico, es_academico=True, ruta_csv="dataset_academico.csv")
+    academico_ok = extraer_dataset_a_csv(dir_academico, es_academico=True, ruta_csv="dataset_academic.csv")
     
     if academico_ok:
         texto_academico = (
@@ -457,7 +519,7 @@ def procesar_predeterminados(base_path):
             "used to establish the theoretical ground truth for William E. Caplin's formal functions."
         )
         generar_tabla_latex(
-            ruta_csv="dataset_academico.csv", 
+            ruta_csv="dataset_academic.csv", 
             ruta_salida="tabla_academica.tex",
             titulo_seccion="Academic Baseline Corpus (73 Pairs)",
             etiqueta_tabla="tab:academic_corpus",

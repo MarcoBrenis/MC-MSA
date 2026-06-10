@@ -55,8 +55,10 @@ pdf_text.txt
 
 # Datasets
 dataset_*/
-dataset_academico.*
-dataset_popular.*
+dataset_academic.txt
+dataset_popular.txt
+!dataset_academic.csv
+!dataset_popular.csv
 
 # Large Model Files / Checkpoints
 *.ckpt
