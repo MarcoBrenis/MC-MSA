@@ -693,9 +693,10 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     try:
         with open(summary_path, 'r', encoding='utf-8') as f:
             header = f.readline().strip().split(',')
+            header_indices = {col.strip().lower(): i for i, col in enumerate(header)}
             for line in f:
                 parts = line.strip().split(',')
-                if len(parts) >= 6:
+                if len(parts) > 0:
                     method_rows[parts[0]] = parts
     except Exception as e:
         print(f"Error reading {summary_path}: {e}")
@@ -704,40 +705,89 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     if not method_rows:
         return
         
-    # We will sort methods to keep the presentation consistent
     sorted_methods = sorted(list(method_rows.keys()))
     
+    # We want to format columns dynamically based on header presence
+    has_mr = "mr" in header_indices
+    has_mdr = "mdr" in header_indices
+    has_map = "map" in header_indices
+    has_top10 = "top10_prec" in header_indices or "top10" in header_indices
+    has_opt_params = "min_voicing_thresh" in header_indices
+    
     lines = []
-    lines.append("-" * 90)
+    divider_len = 160 if has_opt_params else 120
+    lines.append("-" * divider_len)
     lines.append(f"Dataset: {dataset_name}")
-    lines.append("-" * 90)
-    lines.append(f"{'Method':<25} | {'Avg. LCS (%)':<14} | {'MRR (%)':<10} | {'Top-5 (%)':<12} | {'Top-10 (%)':<12} | {'DTW':<10}")
-    lines.append("-" * 90)
+    lines.append("-" * divider_len)
+    
+    # Header line
+    hdr_cols = [f"{'Method':<25}", f"{'Avg. LCS (%)':<14}"]
+    if has_mr: hdr_cols.append(f"{'MR':<8}")
+    hdr_cols.append(f"{'MRR (%)':<10}")
+    if has_mdr: hdr_cols.append(f"{'MDR':<8}")
+    if has_map: hdr_cols.append(f"{'MAP (%)':<10}")
+    hdr_cols.append(f"{'Top-5 (%)':<12}")
+    if has_top10: hdr_cols.append(f"{'Top-10 (%)':<12}")
+    hdr_cols.append(f"{'DTW':<10}")
+    if has_opt_params:
+        hdr_cols.append(f"{'Optimized Parameters (voicing, slope, energy)':<45}")
+    lines.append(" | ".join(hdr_cols))
+    lines.append("-" * divider_len)
     
     for method in sorted_methods:
         row = method_rows[method]
         method_disp = method.upper()
         
+        def get_val(name, is_pct=False, fmt=".2f", default="-"):
+            idx = header_indices.get(name.lower())
+            if idx is not None and idx < len(row) and row[idx] != "":
+                try:
+                    val = float(row[idx])
+                    if is_pct:
+                        val *= 100
+                    return f"{val:{fmt}}"
+                except ValueError:
+                    return row[idx]
+            return default
+
         try:
-            # Check length of the row to support both old 6-col and new 7-col formats
-            if len(row) == 7:
-                lcs = float(row[2]) * 100
-                mrr = float(row[3]) * 100
-                top5 = float(row[4]) * 100
-                top10 = float(row[5]) * 100
-                dtw = float(row[6])
-                lines.append(f"{method_disp:<25} | {lcs:>12.2f}% | {mrr:>8.2f}% | {top5:>10.2f}% | {top10:>10.2f}% | {dtw:>10.2f}")
-            else:
-                # Old 6-column format (missing top10_prec)
-                lcs = float(row[2]) * 100
-                mrr = float(row[3]) * 100
-                top5 = float(row[4]) * 100
-                dtw = float(row[5])
-                lines.append(f"{method_disp:<25} | {lcs:>12.2f}% | {mrr:>8.2f}% | {top5:>10.2f}% | {'-':>11} | {dtw:>10.2f}")
+            lcs = get_val("lcs_promedio" if "lcs_promedio" in header_indices else "avg_lcs", is_pct=True) + "%"
+            mrr = get_val("mrr", is_pct=True) + "%"
+            top5 = get_val("top5_prec", is_pct=True) + "%"
+            dtw = get_val("dtw_promedio" if "dtw_promedio" in header_indices else "avg_dtw")
+            
+            row_cols = [f"{method_disp:<25}", f"{lcs:>12}"]
+            if has_mr:
+                mr = get_val("mr")
+                row_cols.append(f"{mr:>8}")
+            row_cols.append(f"{mrr:>8}")
+            if has_mdr:
+                mdr = get_val("mdr", fmt=".1f")
+                row_cols.append(f"{mdr:>8}")
+            if has_map:
+                map_val = get_val("map", is_pct=True) + "%"
+                row_cols.append(f"{map_val:>8}")
+            row_cols.append(f"{top5:>10}")
+            if has_top10:
+                top10 = get_val("top10_prec" if "top10_prec" in header_indices else "top10", is_pct=True) + "%"
+                row_cols.append(f"{top10:>10}")
+            row_cols.append(f"{dtw:>10}")
+            
+            if has_opt_params:
+                v_t = get_val("min_voicing_thresh", fmt=".4f")
+                s_e = get_val("slope_epsilon", fmt=".4f")
+                e_t = get_val("energy_tau", fmt=".4f")
+                if v_t != "-" and s_e != "-" and e_t != "-":
+                    params_str = f"voicing: {v_t}, slope: {s_e}, energy: {e_t}"
+                else:
+                    params_str = "N/A"
+                row_cols.append(f"{params_str:<45}")
+                
+            lines.append(" | ".join(row_cols))
         except Exception as e:
             lines.append(f"{method.upper():<25} | Error formatting row: {e}")
             
-    lines.append("-" * 90)
+    lines.append("-" * divider_len)
     
     table_content = "\n".join(lines) + "\n"
     table_path = dataset_dir / "tabla_comparativa.txt"
@@ -956,9 +1006,19 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
     classifier = MelodyClassifierPaper()
     summary_path = output_dir / "benchmark_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
+    # Check if summary_path exists but has old format, delete it to avoid column mismatch
+    if summary_path.exists():
+        try:
+            with open(summary_path, 'r') as f:
+                first_line = f.readline().strip()
+            if "mr" not in first_line or "mdr" not in first_line:
+                summary_path.unlink()
+        except Exception:
+            pass
+
     if not summary_path.exists():
         with open(summary_path, 'w') as f:
-            f.write("method,pairs,avg_lcs,mrr,top5_prec,top10_prec,avg_dtw\n")
+            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw\n")
 
     for method in methods:
         classification = METHOD_CLASSIFICATION.get(method, "Unknown")
@@ -1007,6 +1067,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
                 res_covers[uid] = None
         print(f"\n  Covers loaded.")
         lcs_list, dtw_list, mrr_sum, top5_hits, top10_hits, valid_count = [], [], 0.0, 0, 0, 0
+        ranks_list = []
         best_lcs, best_uid = -1.0, None
         detailed_results = []
         
@@ -1144,6 +1205,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
                 
                 if rank != -1:
                     valid_count += 1
+                    ranks_list.append(rank)
                     mrr_sum += 1.0 / rank
                     if rank <= 5: top5_hits += 1
                     if rank <= 10: top10_hits += 1
@@ -1184,16 +1246,19 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
         # Metrics summary
         print(f"\n[{method}] Finished.")
         avg_lcs = np.mean(lcs_list) if lcs_list else 0
+        mr = np.mean(ranks_list) if ranks_list else 0
         mrr = mrr_sum / valid_count if valid_count else 0
+        mdr = np.median(ranks_list) if ranks_list else 0
+        map_val = np.mean([1.0 / r for r in ranks_list]) if ranks_list else 0
         top5_prec = top5_hits / valid_count if valid_count else 0
         top10_prec = top10_hits / valid_count if valid_count else 0
         avg_dtw = np.mean(dtw_list) if dtw_list else 0
         
-        print(f"[{method}] Results | LCS: {avg_lcs:.4f} | MRR: {mrr:.4f} | Top5: {top5_prec:.2%} | Top10: {top10_prec:.2%} | DTW: {avg_dtw:.4f}")
+        print(f"[{method}] Results | LCS: {avg_lcs:.4f} | MR: {mr:.2f} | MRR: {mrr:.4f} | MDR: {mdr:.1f} | MAP: {map_val:.4f} | Top5: {top5_prec:.2%} | Top10: {top10_prec:.2%} | DTW: {avg_dtw:.4f}")
         
         # Export to CSV summary
         with open(summary_path, 'a') as f:
-            f.write(f"{method},{valid_count},{avg_lcs:.6f},{mrr:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f}\n")
+            f.write(f"{method},{valid_count},{avg_lcs:.6f},{mr:.6f},{mrr:.6f},{mdr:.1f},{map_val:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f}\n")
             
         # Evaluate binary classification and optimal thresholds
         best_thresh_lcs, best_metrics_lcs, curves_lcs = evaluate_binary_classification(pairwise_lcs, "LCS")
@@ -1233,7 +1298,10 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
             f.write(f"GENERAL SUMMARY:\n")
             f.write(f"Pairs evaluated: {valid_count}\n")
             f.write(f"Average LCS:    {avg_lcs:.4f}\n")
+            f.write(f"Mean Rank:      {mr:.4f}\n")
             f.write(f"MRR:             {mrr:.4f}\n")
+            f.write(f"Median Rank:     {mdr:.1f}\n")
+            f.write(f"MAP:             {map_val:.4f}\n")
             f.write(f"Top-5 Precision: {top5_prec:.2%}\n")
             f.write(f"Top-10 Precision: {top10_prec:.2%}\n")
             f.write(f"Average DTW:    {avg_dtw:.4f}\n")

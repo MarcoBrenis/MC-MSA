@@ -737,9 +737,19 @@ def main():
     classifier = MelodyClassifierPaper()
     summary_path = output_dir / "benchmark_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
+    # Check if summary_path exists but has old format, delete it to avoid column mismatch
+    if summary_path.exists():
+        try:
+            with open(summary_path, 'r') as f:
+                first_line = f.readline().strip()
+            if "mr" not in first_line or "mdr" not in first_line:
+                summary_path.unlink()
+        except Exception:
+            pass
+
     if not summary_path.exists():
         with open(summary_path, 'w') as f:
-            f.write("metodo,pares,lcs_promedio,mrr,top5_prec,dtw_promedio\n")
+            f.write("metodo,pares,lcs_promedio,mr,mrr,mdr,map,top5_prec,dtw_promedio\n")
 
     for method in methods:
         classification = METHOD_CLASSIFICATION.get(method, "Unknown")
@@ -789,6 +799,7 @@ def main():
         print(f"\n  Covers loaded.")
 
         lcs_list, dtw_list, mrr_sum, top5_hits, valid_count = [], [], 0.0, 0, 0
+        ranks_list = []
         best_lcs, best_uid = -1.0, None
         detailed_results = []
         
@@ -926,6 +937,7 @@ def main():
                 
                 if rank != -1:
                     valid_count += 1
+                    ranks_list.append(rank)
                     mrr_sum += 1.0 / rank
                     if rank <= 5: top5_hits += 1
                     lcs_list.append(true_sim)
@@ -965,15 +977,18 @@ def main():
         # Metrics summary
         print(f"\n[{method}] Finished.")
         avg_lcs = np.mean(lcs_list) if lcs_list else 0
+        mr = np.mean(ranks_list) if ranks_list else 0
         mrr = mrr_sum / valid_count if valid_count else 0
+        mdr = np.median(ranks_list) if ranks_list else 0
+        map_val = np.mean([1.0 / r for r in ranks_list]) if ranks_list else 0
         top5_prec = top5_hits / valid_count if valid_count else 0
         avg_dtw = np.mean(dtw_list) if dtw_list else 0
         
-        print(f"[{method}] Results | LCS: {avg_lcs:.4f} | MRR: {mrr:.4f} | Top5: {top5_prec:.2%} | DTW: {avg_dtw:.4f}")
+        print(f"[{method}] Results | LCS: {avg_lcs:.4f} | MR: {mr:.2f} | MRR: {mrr:.4f} | MDR: {mdr:.1f} | MAP: {map_val:.4f} | Top5: {top5_prec:.2%} | DTW: {avg_dtw:.4f}")
         
         # Export to CSV summary
         with open(summary_path, 'a') as f:
-            f.write(f"{method},{valid_count},{avg_lcs:.6f},{mrr:.6f},{top5_prec:.6f},{avg_dtw:.6f}\n")
+            f.write(f"{method},{valid_count},{avg_lcs:.6f},{mr:.6f},{mrr:.6f},{mdr:.1f},{map_val:.6f},{top5_prec:.6f},{avg_dtw:.6f}\n")
             
         # Evaluate binary classification and optimal thresholds
         best_thresh_lcs, best_metrics_lcs, curves_lcs = evaluate_binary_classification(pairwise_lcs, "LCS")
@@ -1013,7 +1028,10 @@ def main():
             f.write(f"GENERAL SUMMARY:\n")
             f.write(f"Pairs evaluated: {valid_count}\n")
             f.write(f"Average LCS:    {avg_lcs:.4f}\n")
+            f.write(f"Mean Rank:      {mr:.4f}\n")
             f.write(f"MRR:             {mrr:.4f}\n")
+            f.write(f"Median Rank:     {mdr:.1f}\n")
+            f.write(f"MAP:             {map_val:.4f}\n")
             f.write(f"Top-5 Precision: {top5_prec:.2%}\n")
             f.write(f"Average DTW:    {avg_dtw:.4f}\n")
             f.write("="*50 + "\n")

@@ -82,7 +82,7 @@ def main():
                 print("Error: Invalid input. Enter method number or name.")
 
     base_dir = Path(__file__).parent.absolute()
-    dataset_dir = base_dir / "dataset_clei"
+    dataset_dir = base_dir / "dataset_OA"
     orig_dir = dataset_dir / "originales"
     cover_dir = dataset_dir / "covers"
     cache_dir = base_dir / "cache_tiny"
@@ -117,6 +117,7 @@ def main():
         print(f"\n  Originals loaded.")
         
         lcs_correct_list, dtw_correct_list, mrr_sum, top5_hits, valid_covers = [], [], 0.0, 0, 0
+        ranks_list = []
         best_lcs, best_uid, best_pair_res = -1.0, None, None
         detailed_results = []
         
@@ -143,6 +144,7 @@ def main():
                     
             if rank != -1:
                 valid_covers += 1
+                ranks_list.append(rank)
                 mrr_sum += 1.0 / rank
                 if rank <= 5: top5_hits += 1
                 lcs_correct_list.append(true_sim)
@@ -197,11 +199,14 @@ def main():
                     
         # Stats
         avg_lcs = np.mean(lcs_correct_list) if lcs_correct_list else 0.0
+        mr = np.mean(ranks_list) if ranks_list else 0.0
         mrr = mrr_sum / valid_covers if valid_covers > 0 else 0.0
+        mdr = np.median(ranks_list) if ranks_list else 0.0
+        map_val = np.mean([1.0 / r for r in ranks_list]) if ranks_list else 0.0
         top5_prec = top5_hits / valid_covers if valid_covers > 0 else 0.0
         avg_dtw = np.mean(dtw_correct_list) if dtw_correct_list else 0.0
         
-        print(f"\n[{method}] Summary | LCS: {avg_lcs:.4f} | MRR: {mrr:.4f} | Top5: {top5_prec:.1%} | DTW: {avg_dtw:.4f}")
+        print(f"\n[{method}] Summary | LCS: {avg_lcs:.4f} | MR: {mr:.2f} | MRR: {mrr:.4f} | MDR: {mdr:.1f} | MAP: {map_val:.4f} | Top5: {top5_prec:.1%} | DTW: {avg_dtw:.4f}")
         
         # Detailed TXT Report
         out_method_dir = base_dir / "salidas_tiny_benchmark" / method
@@ -220,8 +225,11 @@ def main():
             f.write("="*50 + "\n")
             f.write(f"SUMMARY:\n")
             f.write(f"Average LCS: {avg_lcs:.4f}\n")
-            f.write(f"MRR:          {mrr:.4f}\n")
-            f.write(f"Top-5 Prec.:  {top5_prec:.2%}\n")
+            f.write(f"Mean Rank:   {mr:.4f}\n")
+            f.write(f"MRR:         {mrr:.4f}\n")
+            f.write(f"Median Rank: {mdr:.1f}\n")
+            f.write(f"MAP:         {map_val:.4f}\n")
+            f.write(f"Top-5 Prec.: {top5_prec:.2%}\n")
             f.write(f"Average DTW: {avg_dtw:.4f}\n")
         
         print(f"\n[{method}] Finished.")
