@@ -73,5 +73,8 @@ models/
 exportar_brenis_zenodo.py
 generate_thesis_figures.py
 generate_thesis_plots.py
+extraer_nya.py
+visualizar_*.py
+examples/visualizar_melodia_v2.py
 BRENIS_dataset/
 
