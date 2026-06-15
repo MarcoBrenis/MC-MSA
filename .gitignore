@@ -77,4 +77,8 @@ extraer_nya.py
 visualizar_*.py
 examples/visualizar_melodia_v2.py
 BRENIS_dataset/
+test.py
+comparar_clasificadores.py
+rename_classical_dataset.py
+run_benchmark.py
 
