@@ -101,7 +101,10 @@ Analyzes a single audio file, prints a table of detected formal segments, and ex
 ---
 
 ### F. Real-Audio Thesis Figure Generator (`generate_thesis_figures.py`)
-Generates academic-quality visualizations of the Self-Similarity Matrix (SSM) based on a real audio file, showing detected boundaries, homogeneous blocks, and melodic repetitions.
+> [!NOTE]
+> **Local Research Utility:** This script is preserved locally for thesis visualization research but is excluded from Git version control.
+>
+> Generates academic-quality visualizations of the Self-Similarity Matrix (SSM) based on a real audio file, showing detected boundaries, homogeneous blocks, and melodic repetitions.
 
 * **Usage**:
   ```bash
@@ -115,7 +118,10 @@ Generates academic-quality visualizations of the Self-Similarity Matrix (SSM) ba
 ---
 
 ### G. Conceptual Thesis Figure Generator (`generate_thesis_plots.py`)
-Generates clean, noise-free conceptual diagrams of an SSM representing a classic structure ($A$-$B$-$A'$-$B'$). Ideal for explaining theoretical concepts in the text.
+> [!NOTE]
+> **Local Research Utility:** This script is preserved locally for thesis visualization research but is excluded from Git version control.
+>
+> Generates clean, noise-free conceptual diagrams of an SSM representing a classic structure ($A$-$B$-$A'$-$B'$). Ideal for explaining theoretical concepts in the text.
 
 * **Usage**:
   ```bash

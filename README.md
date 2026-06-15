@@ -140,15 +140,12 @@ fig_f0_flat = plot_f0_no_segments(result)
    result = analyzer.analyze_file("path/to/audio.wav")
    ```
 
-2. **Using the example `examples/visualizar_melodia_v2.py`:** change the line
-   `analyzer = MelodyAnalyzer()` to the aliased version above; no other changes
-   are needed in the script.
-
-   - Exact location: the block for creating the analyzer is at the beginning of the
-     file. Replace the line that creates the analyzer with the commented version
-     `# analyzer = MelodyAnalyzer(classifier=MelodyClassifier(label_aliases={"antecedent": "A", "consequent": "C"}))`.
-   - If using another script, apply the same substitution on the line where you
-     construct `MelodyAnalyzer` or explicitly pass a `MelodyClassifier`.
+2. **Using your custom script:** search for where the analyzer is created and replace `analyzer = MelodyAnalyzer()` with the aliased version:
+   ```python
+   analyzer = MelodyAnalyzer(
+       classifier=MelodyClassifier(label_aliases={"antecedent": "A", "consequent": "C"})
+   )
+   ```
 
 ### Quick Checklist to Use the Visualizer in Your Own Script
 
@@ -183,23 +180,15 @@ modify it freely without affecting the original module.
 
 ### Step-by-Step Example with the `melody_analysis_v2` Clone
 
-If you prefer a ready-to-run script that explains the entire flow line by line and
-generates both support images, check `examples/visualizar_melodia_v2.py`. The code
-contains comments in Spanish describing each instruction, prints the detected
-segments to the console, and saves both the melodic contour and the two spectrograms
-(manual and segmented) in `salidas_visualizacion/`.
+If you are running the project locally, you can check the pre-configured script `examples/visualizar_melodia_v2.py` (which is kept locally but excluded from Git tracking to maintain a clean repository). It explains the entire flow line-by-line in Spanish, prints the detected segments to the console, and saves both the melodic contour and the two spectrograms (manual and segmented) in `salidas_visualizacion/`.
 
-The script attempts to use an interactive backend (TkAgg/QtAgg/MacOSX) if graphical
-support is available, so you can also see the windows with `plt.show()`. If Matplotlib
-continues using `Agg`, export the `MPLBACKEND` environment variable with your
-preferred backend (for example, `MPLBACKEND=TkAgg`) before running the script and
-make sure you have the corresponding dependencies installed.
-
+To run it:
 ```bash
 python examples/visualizar_melodia_v2.py
 ```
+*(Make sure to replace the path `1.mp3` inside the script with your target audio file).*
 
-You only need to replace the path `1.mp3` in the script with your audio file before running it.
+If you cloned the repository from GitHub, you can achieve the same result by creating a new Python file and pasting the code block shown in the code usage section above.
 
 ### Stage-by-Stage Visualizations (v2)
 
