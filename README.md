@@ -226,28 +226,18 @@ steps from left to right:
 
 ```mermaid
 flowchart LR
-    A[Input Audio<br/>WAV/MP3] --> B[STFT Extraction<br/>+ Mel Spectrogram]
-    B --> C[Contour Estimation<br/>f0 in MIDI and Hz]
-    C --> D[Smoothing and Normalization<br/>pitch/energy]
-    D --> E[Novelty Curve
-             based on derivatives]
-    D --> F[Self-Similarity Matrix
-             with checkerboard kernel]
-    E --> G[Fusion of change cues<br/>novelty + self-similarity]
+    A["Input Audio<br/>WAV/MP3"] --> B["STFT Extraction<br/>+ Mel Spectrogram"]
+    B --> C["Contour Estimation<br/>f0 in MIDI and Hz"]
+    C --> D["Smoothing and Normalization<br/>pitch/energy"]
+    D --> E["Novelty Curve<br/>based on derivatives"]
+    D --> F["Self-Similarity Matrix<br/>with checkerboard kernel"]
+    E --> G["Fusion of change cues<br/>novelty + self-similarity"]
     F --> G
-    G --> H[Boundary Detection<br/>of segments]
-    H --> I[Descriptor Calculation<br/>per segment
-            (slope, range,
-             parametric tension)]
-    I --> J[Heuristic Classifier
-            (exposition, question,
-             answer, etc.)]
-    J --> K[Visualization
-            contour + f0 + colors
-            by label]
-    J --> L[JSON Export
-            with labels
-            and descriptors]
+    G --> H["Boundary Detection<br/>of segments"]
+    H --> I["Descriptor Calculation<br/>per segment<br/>(slope, range,<br/>parametric tension)"]
+    I --> J["Heuristic Classifier<br/>(exposition, question,<br/>answer, etc.)"]
+    J --> K["Visualization<br/>contour + f0 + colors<br/>by label"]
+    J --> L["JSON Export<br/>with labels<br/>and descriptors"]
 ```
 
 - **Self-Similarity**: compares windows of the contour to highlight repetitions or
