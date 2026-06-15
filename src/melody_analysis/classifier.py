@@ -156,11 +156,11 @@ class MelodyClassifier:
                 and slope <= 0.0
                 and energy_delta <= 0.0
             ):
-                return "cadencia"
+                return "cadence"
 
             # Cierre más neutro pero aún frase-final
             if slope_abs < self.slope_threshold and end_rel < 0.0:
-                return "cadencia"
+                return "cadence"
 
         # 2) EXPOSITION: first segment, presentación estable del material
         if index == 0:
@@ -169,7 +169,7 @@ class MelodyClassifier:
                 and pitch_range <= self.range_threshold
                 and self.tension_low <= tension <= self.tension_high
             ):
-                return "exposicion"
+                return "exposition"
 
         # 3) QUESTION: contorno ascendente / final alto, tensión creciente
         if (
@@ -177,14 +177,14 @@ class MelodyClassifier:
             and end_rel > self.end_high_threshold
             and tension >= prev_tension
         ):
-            return "pregunta"
+            return "antecedent"
 
         # 4) ANSWER: contorno descendente / regreso al registro medio/bajo
         if (
             (slope < -self.slope_threshold or descriptor["delta_pitch"] < -self.range_threshold)
             and (end_rel < start_rel or end_rel < 0.0)
         ):
-            return "respuesta"
+            return "consequent"
 
         # 5) DEVELOPMENT: interior, rango amplio y alta tensión (pico del arch melódico)
         if 0 < index < total - 1:
@@ -193,17 +193,17 @@ class MelodyClassifier:
                 and tension >= self.tension_high
                 and center_rel > 0.0
             ):
-                return "desarrollo"
+                return "development"
 
         # 6) TRANSITION: aumento claro de tensión pero sin llegar a pregunta
         if (
             tension - prev_tension >= self.transition_delta_tension
             and slope > 0.0
         ):
-            return "transicion"
+            return "transition"
 
-        # 7) AFIRMACIÓN: fallback neutro
-        return "afirmacion"
+        # 7) STATEMENT: fallback neutro
+        return "statement"
 
     def classify(
         self, features: MelodyFeatures, segments: List[MelodySegment]

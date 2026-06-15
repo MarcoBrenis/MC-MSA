@@ -113,39 +113,39 @@ class MelodyClassifierV1Rules:
         # 1) CADENCE: final closure
         if index == total - 1:
             if end_rel < self.end_low_threshold and slope <= 0.0 and energy_delta <= 0.0:
-                return "Cadencia"
+                return "Cadence"
             if slope_abs < self.slope_threshold and end_rel < 0.0:
-                return "Cadencia"
+                return "Cadence"
 
         # 2) EXPOSITION: first segment
         if index == 0:
             if (slope_abs < self.slope_threshold and 
                 pitch_range <= self.range_threshold and 
                 self.tension_low <= tension <= self.tension_high):
-                return "Exposición"
+                return "Exposition"
 
         # 3) QUESTION
         if ((slope > self.slope_threshold or descriptor["delta_pitch"] > self.range_threshold) and 
             end_rel > self.end_high_threshold and tension >= prev_tension):
-            return "Pregunta"
+            return "Antecedent"
 
         # 4) ANSWER
         if ((slope < -self.slope_threshold or descriptor["delta_pitch"] < -self.range_threshold) and 
             (end_rel < start_rel or end_rel < 0.0)):
-            return "Respuesta"
+            return "Consequent"
 
         # 5) DEVELOPMENT
         if 0 < index < total - 1:
             if (pitch_range >= self.range_high and 
                 tension >= self.tension_high and 
                 center_rel > 0.0):
-                return "Desarrollo"
+                return "Development"
 
         # 6) TRANSITION
         if (tension - prev_tension >= self.transition_delta_tension and slope > 0.0):
-            return "Transición"
+            return "Transition"
 
-        return "Afirmación"
+        return "Statement"
 
     def classify(
         self, features: MelodyFeatures, segments: List[MelodySegment], sim_matrix: Optional[np.ndarray] = None, ssm_step: int = 1
@@ -168,7 +168,7 @@ class MelodyClassifierV1Rules:
             idx = slice(segment.start_index, segment.end_index + 1)
             voicing = features.confidence[idx]
             if np.mean(voicing) < 0.1: # Silence detected by voicing
-                annotations.append(MelodySegmentAnnotation(segment=segment, label="Silencio", confidence=1.0, descriptor={"is_silence": True}))
+                annotations.append(MelodySegmentAnnotation(segment=segment, label="Silence", confidence=1.0, descriptor={"is_silence": True}))
                 continue
 
             descriptor = self._segment_descriptor(

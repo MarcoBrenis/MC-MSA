@@ -141,8 +141,10 @@ def main() -> None:
         "s": "S",
         "x": "S",
         "rest": "S",
-        "antecedente": "Ant",
-        "consecuente": "Cons",
+        "antecedente": "A",
+        "antecedent": "A",
+        "consecuente": "C",
+        "consequent": "C",
     }
     
     seq_orig_mapped = [label_to_initial.get(s.lower(), s) for s in seq_orig]

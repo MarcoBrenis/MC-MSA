@@ -64,12 +64,11 @@ def main() -> None:
     # --- Melody Analysis ---
     # Define path to audio file to analyze.
     audio_path = "1.mp3"
-    # Create an instance of the melody analyzer.
-    # If you want aliases (e.g. "pregunta"→"Q" and "respuesta"→"A"),
+    # If you want aliases (e.g. "antecedent"→"A" and "consequent"→"C"),
     # replace the following line with the commented one below.
     analyzer = MelodyAnalyzer()
     # analyzer = MelodyAnalyzer(
-    #     classifier=MelodyClassifier(label_aliases={"pregunta": "Q", "respuesta": "A"})
+    #     classifier=MelodyClassifier(label_aliases={"antecedent": "A", "consequent": "C"})
     # )
     # Call method to analyze file, which returns an object with results.
     resultado = analyzer.analyze_file(audio_path)

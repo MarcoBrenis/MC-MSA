@@ -3,6 +3,9 @@ import re
 import json
 import argparse
 import gc
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*pkg_resources.*")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 from pathlib import Path
 import numpy as np
 import librosa
@@ -267,6 +270,17 @@ def evaluate_binary_classification(pairwise_results, metric_name, lower_is_bette
     return best_thresh, best_metrics, curves
 
 
+def normalize_label(label: str) -> str:
+    l = label.strip().lower()
+    if l in ['pregunta', 'antecedent', 'a', 'q', 'question']:
+        return 'Antecedent'
+    elif l in ['respuesta', 'consequent', 'c', 'r', 'answer']:
+        return 'Consequent'
+    elif l in ['silencio', 'silence', 'x', 's']:
+        return 'Silence'
+    return label
+
+
 def load_or_analyze(analyzer, file_path, method, cache_dir):
     cache_path = cache_dir / method / f"{file_path.stem}.json"
     if cache_path.exists():
@@ -283,7 +297,7 @@ def load_or_analyze(analyzer, file_path, method, cache_dir):
             segments = [
                 MelodySegmentAnnotation(
                     segment=MelodySegment(s["start_time"], s["end_time"], 0, 0),
-                    label=s["label"],
+                    label=normalize_label(s["label"]),
                     confidence=s["confidence"],
                     descriptor=s["descriptor"]
                 )
@@ -298,6 +312,8 @@ def load_or_analyze(analyzer, file_path, method, cache_dir):
             pass
     
     result = analyzer.analyze_file(str(file_path))
+    for s in result.segments:
+        s.label = normalize_label(s.label)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_path, 'w') as f:
         json.dump(result.to_dict(), f)

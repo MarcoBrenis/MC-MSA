@@ -58,7 +58,7 @@ class MelodyClassifierPaper:
             mean_voicing = float(np.mean(voicing)) if voicing.size > 0 else 0.0
             
             if mean_voicing < self.min_voicing_thresh:
-                label = "Silencio"
+                label = "Silence"
                 confidence = 1.0 - mean_voicing
                 descriptor = {"mean_voicing": mean_voicing, "reason": "Low voicing"}
             else:
@@ -82,17 +82,17 @@ class MelodyClassifierPaper:
                 # C: slope < -epsilon AND energy_tail < tau (resolution/closure)
                 
                 if slope > self.slope_epsilon or tail_energy > self.energy_tau:
-                    label = "Pregunta"
+                    label = "Antecedent"
                     descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
                 elif slope < -self.slope_epsilon and tail_energy < (self.energy_tau / 2.0):
-                    label = "Respuesta"
+                    label = "Consequent"
                     descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
                 else:
                     # Fallback/Ambiguous cases
                     if slope < 0:
-                        label = "Respuesta"
+                        label = "Consequent"
                     else:
-                        label = "Pregunta"
+                        label = "Antecedent"
                     descriptor = {"f0_slope": slope, "energy_tail": tail_energy, "fallback": True}
                 
                 confidence = 0.8 # Fixed confidence for logic-based labels

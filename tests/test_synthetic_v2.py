@@ -65,9 +65,9 @@ def test_classifier_assigns_melodic_roles():
     annotations = classifier.classify(features, segments, sim_matrix=sim_matrix)
 
     labels = [ann.label for ann in annotations]
-    assert any(x in labels[0].lower() for x in ["antecedent", "presentation", "antecedente", "presentación", "presentacion"])
-    assert any(any(x in l.lower() for x in ["antecedente", "presentación", "presentacion", "antecedent", "presentation", "idea"]) for l in labels)
-    assert any(any(x in l.lower() for x in ["consecuente", "continuación", "continuacion", "contrasting", "repetition"]) for l in labels)
+    assert any(x in labels[0].lower() for x in ["antecedent", "presentation"])
+    assert any(any(x in l.lower() for x in ["antecedent", "presentation", "idea"]) for l in labels)
+    assert any(any(x in l.lower() for x in ["consequent", "continuation", "contrasting", "repetition"]) for l in labels)
 
 
 def test_analyzer_works_with_precomputed_features():
@@ -77,7 +77,7 @@ def test_analyzer_works_with_precomputed_features():
 
     assert result.segments
     assert sum(seg.segment.duration() for seg in result.segments) > 0
-    assert any(any(x in seg.label.lower() for x in ["antecedent", "presentation", "antecedente", "presentación", "presentacion"]) for seg in result.segments)
+    assert any(any(x in seg.label.lower() for x in ["antecedent", "presentation"]) for seg in result.segments)
 
 
 def test_visualizations_generate_images(tmp_path):

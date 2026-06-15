@@ -80,6 +80,53 @@ A lightweight script designed for testing or debugging. It executes the analysis
 
 ---
 
+### E. Single Track Analyzer (`analyze_single_track.py`)
+Analyzes a single audio file, prints a table of detected formal segments, and exports full visualizations and a synthesized melody WAV file.
+
+* **Usage**:
+  ```bash
+  python analyze_single_track.py path/to/song.mp3 --method pyin --classifier standard
+  ```
+* **Arguments**:
+  * `audio_path`: Path to the audio file (optional, prompts if omitted).
+  * `--method`: Pitch extraction method (e.g., `pyin`, `crepe`, `bs_roformer_rmvpe`, etc.).
+  * `--classifier`: Classifier rules (`standard` or `paper`).
+  * `--output_dir`: Output directory for exports (default: `salidas_single_track`).
+* **Outputs**:
+  * `<song>_contour.png`: Melodic contour with segments and energy.
+  * `<song>_spectrogram.png`: Segment-annotated Mel-spectrogram.
+  * `<song>_ssm.png`: Self-similarity matrix.
+  * `<song>_synthesized.wav`: Sine-wave synthesized audio of the extracted melody contour.
+
+---
+
+### F. Real-Audio Thesis Figure Generator (`generate_thesis_figures.py`)
+Generates academic-quality visualizations of the Self-Similarity Matrix (SSM) based on a real audio file, showing detected boundaries, homogeneous blocks, and melodic repetitions.
+
+* **Usage**:
+  ```bash
+  python generate_thesis_figures.py path/to/song.mp3 --method pyin
+  ```
+* **Outputs**:
+  * `ssm_boundaries.png`: The SSM showing boundaries along the diagonal.
+  * `ssm_homogeneous.png`: The SSM highlighting a cohesive diagonal block.
+  * `ssm_repetitions.png`: The SSM highlighting symmetric off-diagonal repetitions.
+
+---
+
+### G. Conceptual Thesis Figure Generator (`generate_thesis_plots.py`)
+Generates clean, noise-free conceptual diagrams of an SSM representing a classic structure ($A$-$B$-$A'$-$B'$). Ideal for explaining theoretical concepts in the text.
+
+* **Usage**:
+  ```bash
+  python generate_thesis_plots.py
+  ```
+* **Outputs**:
+  * `fig_homogeneity.png`: Two-panel visualization showing a full SSM and a zoomed-in homogeneous block on the diagonal (Homogeneity Principle).
+  * `fig_repetition.png`: Multi-panel visualization comparing the diagonal blocks ($A_1$ and $A_2$) and their off-diagonal intersection ($A_1 \times A_2$), demonstrating parallel similarity patterns (Repetition Principle).
+
+---
+
 ## 3. Caching & Memory Management
 
 To support large datasets (70+ pairs) on consumer hardware without Out-Of-Memory (OOM) crashes:

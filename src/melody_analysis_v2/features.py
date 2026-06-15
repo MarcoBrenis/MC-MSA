@@ -794,13 +794,10 @@ def _extract_jdc(
     label: str = "",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Helper for JDC (Joint Detection and Classification) vocal pitch estimator."""
-    # JDC (Joint Detection and Classification)
-    # Since the vocal-pitch-estimator package is often difficult to install,
-    # we use RMVPE as a high-quality CNN-based fallback.
-    print(f"JDC implementation not found. Using high-quality fallback (RMVPE) for {label}..." if label else "JDC implementation not found. Using high-quality fallback (RMVPE)...")
-    
-    # Simple pass-through to RMVPE
-    return _extract_rmvpe(audio, sample_rate, hop_length, label=label)
+    raise NotImplementedError(
+        "JDC (Joint Detection and Classification) vocal pitch estimator is not installed or configured in this environment. "
+        "Please check the installation of the vocal-pitch-estimator package."
+    )
 
 
 def _extract_fcn_f0(
@@ -810,13 +807,86 @@ def _extract_fcn_f0(
     label: str = "",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Helper for FCN-f0 estimator."""
-    # FCN-f0 (Fully Convolutional Network for f0)
-    # Since the specific Kum et al. model is often missing in local builds,
-    # we use RMVPE as a state-of-the-art FCN-based fallback.
-    print(f"FCN-f0 implementation not found. Using high-quality FCN fallback (RMVPE) for {label}..." if label else "FCN-f0 implementation not found. Using high-quality FCN fallback (RMVPE)...")
-    
-    # Simple pass-through to RMVPE
-    return _extract_rmvpe(audio, sample_rate, hop_length, label=label)
+    import sys
+    from pathlib import Path
+
+    fcn_dir = Path(__file__).parent / "fcn_f0_src"
+    if not fcn_dir.exists():
+        raise ImportError(
+            "FCN-f0 source directory not found. Please clone the FCN-f0 repository to src/melody_analysis_v2/fcn_f0_src"
+        )
+
+    # Add FCN-f0 directory to path to allow import of models, prediction, etc.
+    if str(fcn_dir.resolve()) not in sys.path:
+        sys.path.insert(0, str(fcn_dir.resolve()))
+
+    try:
+        from models.load_model import load_model
+        from prediction import sliding_norm, predict_fullConv
+    except ImportError as e:
+        raise ImportError(
+            f"Failed to import modules from FCN-f0. Ensure fcn_f0_src is correct. Error: {e}"
+        )
+
+    # FCN-f0 expects mono audio at 8000 Hz.
+    # Convert to mono if stereo
+    if audio.ndim > 1:
+        audio = np.mean(audio, axis=0)
+
+    # Resample audio to 8000 Hz
+    if sample_rate != 8000:
+        audio_8k = librosa.resample(audio, orig_sr=sample_rate, target_sr=8000)
+    else:
+        audio_8k = audio
+
+    model_tag = "993"
+    model_input_size = 993
+    model_srate = 8000.0
+
+    model_key = f"fcn_{model_tag}"
+    if model_key not in _MODEL_CACHE:
+        print(f"Cargando modelo FCN-f0 (tag: {model_tag})...")
+        # Load in FULLCONV mode, inputSize is None
+        _MODEL_CACHE[model_key] = load_model(model_tag, FULLCONV=True)
+
+    model = _MODEL_CACHE[model_key]
+
+    # Pad so that frames are centered (like in get_audio of prediction.py)
+    padded_audio = np.pad(audio_8k, int(model_input_size // 2), mode='constant', constant_values=0)
+
+    # Sliding norm
+    norm_audio = sliding_norm(padded_audio, frame_sizes=model_input_size)
+    norm_audio = np.reshape(norm_audio, (len(norm_audio), 1, 1))
+    norm_audio = np.array([norm_audio])
+
+    # Run prediction
+    print(f"Running FCN-f0 inference for {label}..." if label else "Running FCN-f0 inference...")
+    (timeVec, frequencies, confidence, activations) = predict_fullConv(model, norm_audio, viterbi=False, model_srate=model_srate)
+
+    # Convert frequencies to MIDI note numbers
+    pitch_midi = np.zeros_like(frequencies)
+    voiced = frequencies > 0
+    pitch_midi[voiced] = librosa.hz_to_midi(frequencies[voiced])
+    pitch_midi[~voiced] = 0.0  # Set unvoiced to 0 for interpolation
+
+    # Align and interpolate to target timestamps
+    n_target_frames = int(np.ceil(len(audio) / hop_length))
+    target_times = librosa.frames_to_time(
+        np.arange(n_target_frames),
+        sr=sample_rate,
+        hop_length=hop_length
+    )
+
+    f_pitch = interp1d(timeVec, pitch_midi, kind='linear', fill_value="extrapolate", bounds_error=False)
+    f_conf = interp1d(timeVec, confidence, kind='linear', fill_value="extrapolate", bounds_error=False)
+
+    pitch_interp = f_pitch(target_times)
+    conf_interp = f_conf(target_times)
+
+    # Voicing detection: set unvoiced frames to NaN
+    pitch_interp[conf_interp < 0.2] = np.nan
+
+    return pitch_interp, conf_interp
 
 
 def extract_melody_features(

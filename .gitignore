@@ -52,6 +52,7 @@ resultados_benchmark_optuna/
 tabla_academica.tex
 tabla_popular.tex
 pdf_text.txt
+thesis_figures/
 
 # Datasets
 dataset_*/
@@ -67,4 +68,10 @@ models/
 
 # Vocal Separation Cache
 .vocal_cache/
+
+# Thesis & Zenodo helpers (local only)
+exportar_brenis_zenodo.py
+generate_thesis_figures.py
+generate_thesis_plots.py
+BRENIS_dataset/
 

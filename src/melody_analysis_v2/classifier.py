@@ -162,8 +162,8 @@ class MelodyClassifier:
             
             # 1. PRESENTATION (Sentence Structure)
             if sim_score >= self.similarity_threshold and abs(s1_data["descriptor"]["pitch_slope"]) < 5.0:
-                s1_data["caplin_label"] = "Presentación"
-                s2_data["caplin_label"] = "Presentación"
+                s1_data["caplin_label"] = "Presentation"
+                s2_data["caplin_label"] = "Presentation"
                 
                 # Check for CONTINUATION
                 if idx_in_musical + 2 < len(musical_indices):
@@ -173,32 +173,32 @@ class MelodyClassifier:
                     is_expanded = s3_data["descriptor"]["pitch_range"] > (s1_data["descriptor"]["pitch_range"] * 1.5)
                     
                     if is_fragmented or is_expanded:
-                        s3_data["caplin_label"] = "Continuación"
+                        s3_data["caplin_label"] = "Continuation"
                     else:
-                        s3_data["caplin_label"] = "Continuación"
+                        s3_data["caplin_label"] = "Continuation"
                         
                 if idx_in_musical + 3 < len(musical_indices):
                     s4_i = musical_indices[idx_in_musical + 3]
                     s4_data = segment_data[s4_i]
                     if s4_data["descriptor"]["energy_delta"] < 0 and s4_data["descriptor"]["pitch_slope"] < 0:
-                        s4_data["caplin_label"] = "Extensión Cadencial"
+                        s4_data["caplin_label"] = "Cadential Extension"
                     else:
-                        s4_data["caplin_label"] = "Continuación"
+                        s4_data["caplin_label"] = "Continuation"
                     
             # 2. ANTECEDENT (Period Structure)
             else:
-                s1_data["caplin_label"] = "Antecedente"
+                s1_data["caplin_label"] = "Antecedent"
                 
                 # Antecedent usually ends with a Half Cadence (tension)
                 # HC: Ends on a note that is NOT the tonic (usually the 5th)
                 s2_last_pc = int(np.round(s2_data["descriptor"]["pitch_end_absolute"])) % 12
                 is_hc = s2_last_pc != tonic
                 
-                s2_data["caplin_label"] = "Antecedente" # Keep general label
+                s2_data["caplin_label"] = "Antecedent" # Keep general label
                 
                 # Check for CONSEQUENT
                 if idx_in_musical + 2 < len(musical_indices):
-                    segment_data[musical_indices[idx_in_musical + 2]]["caplin_label"] = "Consecuente"
+                    segment_data[musical_indices[idx_in_musical + 2]]["caplin_label"] = "Consequent"
                     
                 if idx_in_musical + 3 < len(musical_indices):
                     s4_i = musical_indices[idx_in_musical + 3]
@@ -209,12 +209,12 @@ class MelodyClassifier:
                     s4_last_pc = int(np.round(s4_data["descriptor"]["pitch_end_absolute"])) % 12
                     is_pac = (s4_last_pc == tonic) and (s4_data["descriptor"]["pitch_slope"] < 0)
                     
-                    s4_data["caplin_label"] = "Consecuente"
-
+                    s4_data["caplin_label"] = "Consequent"
+ 
         # Cleanup trailing unknowns
         for data in segment_data:
             if data["caplin_label"] == "unknown":
-                data["caplin_label"] = "Extensión Cadencial" # Standard fallback for loose ends in forms
+                data["caplin_label"] = "Cadential Extension" # Standard fallback for loose ends in forms
 
     def classify(
         self, features: MelodyFeatures, segments: List[MelodySegment], sim_matrix: Optional[np.ndarray] = None, ssm_step: int = 1
@@ -232,7 +232,7 @@ class MelodyClassifier:
         segment_data = []
         for segment in segments:
             desc = self._extract_descriptors(features, segment, global_pitch_mean)
-            label = "Silencio" if desc["is_silence"] else "unknown"
+            label = "Silence" if desc["is_silence"] else "unknown"
             segment_data.append({
                 "segment": segment,
                 "descriptor": desc,
@@ -247,7 +247,7 @@ class MelodyClassifier:
             
             for data in segment_data:
                 # Simple confidence based on how far we are from the SSM threshold
-                if data["caplin_label"] == "Silencio":
+                if data["caplin_label"] == "Silence":
                     confidence = 1.0
                 else:
                     ssm_sim = data["descriptor"].get("ssm_similarity_with_previous", 0.0)

@@ -272,7 +272,7 @@ def run_single_dataset_optuna_benchmark(dataset_dir: Path, methods: list, args, 
         all_comparisons = []
 
         # Load comparisons cache if it exists
-        comp_cache_path = cache_dir / method / f"comparison_cache_{dataset_dir.name}.json"
+        comp_cache_path = cache_dir / method / f"comparison_cache_{dataset_dir.name}_optuna.json"
         comp_cache = {}
         comp_cache_changed = False
         if comp_cache_path.exists():
@@ -728,7 +728,7 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     lines.append("-" * divider_len)
     
     table_content = "\n".join(lines) + "\n"
-    table_path = dataset_dir / "tabla_comparativa.txt"
+    table_path = dataset_dir / "tabla_comparativa_optuna.txt"
     try:
         table_path.write_text(table_content, encoding='utf-8')
         print(f"\n[Comparative Table] Successfully saved at {table_path}")

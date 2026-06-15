@@ -216,7 +216,8 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     lines.append("-" * divider_len)
     
     table_content = "\n".join(lines) + "\n"
-    table_path = dataset_dir / "tabla_comparativa_recalculada.txt"
+    table_filename = "tabla_comparativa_recalculada_optuna.txt" if "optuna" in output_dir.name else "tabla_comparativa_recalculada.txt"
+    table_path = dataset_dir / table_filename
     try:
         table_path.write_text(table_content, encoding='utf-8')
         print(f"[Comparative Table] Successfully saved at {table_path}")
@@ -352,7 +353,8 @@ def main():
     if cache_dir.exists():
         for item in cache_dir.iterdir():
             if item.is_dir():
-                comp_cache_file = item / f"comparison_cache_{dataset_dir.name}.json"
+                cache_suffix = "_optuna.json" if args.optuna else ".json"
+                comp_cache_file = item / f"comparison_cache_{dataset_dir.name}{cache_suffix}"
                 if comp_cache_file.exists():
                     methods_found.append((item.name, comp_cache_file))
 

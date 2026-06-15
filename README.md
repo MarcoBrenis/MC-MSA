@@ -3,7 +3,7 @@
 An experimental tool to segment and classify the melodic structure of an audio recording.
 The workflow is inspired by MSAF but focuses on melody: it extracts the contour
 (pitch and energy), detects structural changes, and labels each phrase with simple
-musical roles such as "exposition", "question", or "answer".
+musical roles such as "presentation", "continuation", "antecedent", or "consequent".
 
 The section detector combines two change cues: a derived novelty curve
 (pitch/energy jumps) and a self-similarity matrix with a checkerboard kernel
@@ -78,11 +78,11 @@ fig_novelty = plot_signal_and_novelty(result)
 fig_ssm = plot_self_similarity(result)
 # Plots include the contour in MIDI and the f0 curve (Hz) overlaid when applicable.
 
-# Do you want to rename the labels (e.g. "pregunta" -> "Q" and "respuesta" -> "A")?
+# Do you want to rename the labels (e.g. "antecedent" -> "A" and "consequent" -> "C")?
 # Just change the line where the analyzer is created and pass aliases to the classifier;
 # no need to modify anything else, and colors/legends are preserved.
 analyzer_custom = MelodyAnalyzer(
-    classifier=MelodyClassifier(label_aliases={"pregunta": "Q", "respuesta": "A"})
+    classifier=MelodyClassifier(label_aliases={"antecedent": "A", "consequent": "C"})
 )
 result_custom = analyzer_custom.analyze_file("path/to/audio.wav")
 ```
@@ -112,7 +112,7 @@ for segment in result.segments:
 
 # To rename labels in this same example, change the line above to:
 # analyzer = MelodyAnalyzer(
-#     classifier=MelodyClassifier(label_aliases={"pregunta": "Q", "respuesta": "A"})
+#     classifier=MelodyClassifier(label_aliases={"antecedent": "A", "consequent": "C"})
 # )
 
 fig1 = plot_melody_contour(result)
@@ -126,7 +126,7 @@ fig_f0 = plot_f0_only(result)
 fig_f0_flat = plot_f0_no_segments(result)
 ```
 
-### Quick Guide to Rename Labels to Q/A (or any alias)
+### Quick Guide to Rename Labels (e.g. to A/C or any alias)
 
 1. **Via code (v1 or v2):** when creating the analyzer, pass `label_aliases` to the
    classifier. You only need to modify that line.
@@ -135,7 +135,7 @@ fig_f0_flat = plot_f0_no_segments(result)
    from melody_analysis import MelodyAnalyzer, MelodyClassifier  # or melody_analysis_v2
 
    analyzer = MelodyAnalyzer(
-       classifier=MelodyClassifier(label_aliases={"pregunta": "Q", "respuesta": "A"})
+       classifier=MelodyClassifier(label_aliases={"antecedent": "A", "consequent": "C"})
    )
    result = analyzer.analyze_file("path/to/audio.wav")
    ```
@@ -146,7 +146,7 @@ fig_f0_flat = plot_f0_no_segments(result)
 
    - Exact location: the block for creating the analyzer is at the beginning of the
      file. Replace the line that creates the analyzer with the commented version
-     `# analyzer = MelodyAnalyzer(classifier=MelodyClassifier(label_aliases={"pregunta": "Q", "respuesta": "A"}))`.
+     `# analyzer = MelodyAnalyzer(classifier=MelodyClassifier(label_aliases={"antecedent": "A", "consequent": "C"}))`.
    - If using another script, apply the same substitution on the line where you
      construct `MelodyAnalyzer` or explicitly pass a `MelodyClassifier`.
 

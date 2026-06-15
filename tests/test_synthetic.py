@@ -62,9 +62,9 @@ def test_classifier_assigns_melodic_roles():
     annotations = classifier.classify(features, segments)
 
     labels = [ann.label for ann in annotations]
-    assert labels[0] in {"exposicion", "afirmacion"}
-    assert any(l in {"pregunta", "respuesta", "afirmacion"} for l in labels)
-    assert labels[-1] in {"cadencia", "respuesta", "afirmacion"}
+    assert labels[0].lower() in {"exposition", "statement"}
+    assert any(l.lower() in {"antecedent", "consequent", "statement"} for l in labels)
+    assert labels[-1].lower() in {"cadence", "consequent", "statement"}
 
 
 def test_analyzer_works_with_precomputed_features():
@@ -74,7 +74,7 @@ def test_analyzer_works_with_precomputed_features():
 
     assert result.segments
     assert sum(seg.segment.duration() for seg in result.segments) > 0
-    assert any(seg.label in {"pregunta", "respuesta", "afirmacion", "exposicion"} for seg in result.segments)
+    assert any(seg.label.lower() in {"antecedent", "consequent", "statement", "exposition"} for seg in result.segments)
 
 
 def test_visualizations_generate_images(tmp_path):
