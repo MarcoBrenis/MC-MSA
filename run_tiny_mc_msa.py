@@ -116,9 +116,9 @@ def main():
             prefix = f"  [{i}/{total_p}] ({i/total_p:.1%}) [Original] [{method}]"
             cache_path = cache_dir / method / f"{file_path.stem}.json"
             if cache_path.exists():
-                print(f"{prefix} [Caché] {file_path.name}")
+                print(f"{prefix} [Cache] {file_path.name}")
             else:
-                print(f"{prefix} [Procesando] {file_path.name}...")
+                print(f"{prefix} [Processing] {file_path.name}...")
             res_originals[uid] = load_or_analyze(analyzer, file_path, method, cache_dir)
         print(f"  Originals loaded.")
         
@@ -132,9 +132,9 @@ def main():
             prefix = f"  [{i}/{total_p}] ({i/total_p:.1%}) [Cover] [{method}]"
             cache_path = cache_dir / method / f"{file_path.stem}.json"
             if cache_path.exists():
-                print(f"{prefix} [Caché] {file_path.name}")
+                print(f"{prefix} [Cache] {file_path.name}")
             else:
-                print(f"{prefix} [Procesando] {file_path.name}...")
+                print(f"{prefix} [Processing] {file_path.name}...")
             res_cover = load_or_analyze(analyzer, file_path, method, cache_dir)
             seq_cover = [s.label for s in res_cover.segments]
             

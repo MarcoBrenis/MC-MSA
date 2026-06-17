@@ -35,8 +35,8 @@ METHOD_CLASSIFICATION = {
     'bs_roformer_rmvpe': 'Melody Extractor (Melody Extractor - Roformer+RMVPE)',
     'bs_roformer': 'Melody Extractor (Melody Extractor - Roformer+RMVPE)',
     'demucs': 'Melody Extractor (Melody Extractor - Demucs+CREPE)',
-    'bs_roformer_crepe': 'Extractor de Melodía (Melody Extractor - Roformer+CREPE)',
-    'demucs_rmvpe': 'Extractor de Melodía (Melody Extractor - Demucs+RMVPE)',
+    'bs_roformer_crepe': 'Melody Extractor (Melody Extractor - Roformer+CREPE)',
+    'demucs_rmvpe': 'Melody Extractor (Melody Extractor - Demucs+RMVPE)',
     'basic_pitch': 'Melody Extractor (Melody Extractor - Spotify Basic Pitch)',
     'tachibana': 'Melody Extractor (Melody Extractor - Tachibana HPSS+Melodia)',
     'poliner': 'Melody Extractor (Melody Extractor - Poliner & Ellis STFT Peak)',
@@ -1053,9 +1053,9 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
                 cache_dir_method = cache_dir / method
                 tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
                 if tiny_path.exists():
-                    print(f"{prefix} [Caché] {file_path.name}")
+                    print(f"{prefix} [Cache] {file_path.name}")
                 else:
-                    print(f"{prefix} [Procesando] {file_path.name}...")
+                    print(f"{prefix} [Processing] {file_path.name}...")
                 
                 res_originals[uid] = load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=prefix)
                 gc.collect()
@@ -1072,9 +1072,9 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
                 cache_dir_method = cache_dir / method
                 tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
                 if tiny_path.exists():
-                    print(f"{prefix} [Caché] {file_path.name}")
+                    print(f"{prefix} [Cache] {file_path.name}")
                 else:
-                    print(f"{prefix} [Procesando] {file_path.name}...")
+                    print(f"{prefix} [Processing] {file_path.name}...")
                 
                 res_covers[uid] = load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=prefix)
                 gc.collect()
@@ -1457,12 +1457,12 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
                 plt.close('all')
                 gc.collect()
 
-    # Guardar tabla comparativa consolidada en la carpeta del dataset
+    # Save consolidated comparative table in the dataset folder
     save_dataset_comparative_table(dataset_dir, output_dir)
 
 
 def run_mc_msa_execution(args, base_dir):
-    # Resolver rutas base compartidas
+    # Resolve shared base paths
     cache_dir = Path(args.cache_dir)
     if not cache_dir.is_absolute():
         cache_dir = base_dir / cache_dir
@@ -1490,10 +1490,10 @@ def run_mc_msa_execution(args, base_dir):
         for m in methods:
             method_cache_dir = cache_dir / m
             if method_cache_dir.exists():
-                print(f"[Caché] Deleting existing cache files for method '{m}' en {method_cache_dir}...")
+                print(f"[Cache] Deleting existing cache files for method '{m}' in {method_cache_dir}...")
                 import shutil
                 shutil.rmtree(method_cache_dir)
-                print(f"[Caché] Deletion completed for '{m}'.")
+                print(f"[Cache] Deletion completed for '{m}'.")
     else:
         any_cache_exists = any((cache_dir / m).exists() and (cache_dir / m).is_dir() and any((cache_dir / m).iterdir()) for m in methods)
         if any_cache_exists:
@@ -1502,12 +1502,12 @@ def run_mc_msa_execution(args, base_dir):
                 for m in methods:
                     method_cache_dir = cache_dir / m
                     if method_cache_dir.exists():
-                        print(f"[Caché] Deleting cache files at {method_cache_dir}...")
+                        print(f"[Cache] Deleting cache files at {method_cache_dir}...")
                         import shutil
                         shutil.rmtree(method_cache_dir)
-                print("[Caché] Deletion completed.")
+                print("[Cache] Deletion completed.")
 
-    # Determinar datasets a procesar
+    # Determine datasets to process
     if args.dataset_dir == "all":
         datasets_to_process = []
         datasets_names = find_available_datasets(base_dir)
@@ -1522,7 +1522,7 @@ def run_mc_msa_execution(args, base_dir):
             path = base_dir / path
         datasets_to_process = [path]
 
-    # Procesar datasets seleccionados
+    # Process selected datasets
     for dataset_dir in datasets_to_process:
         try:
             run_single_dataset_mc_msa(dataset_dir, methods, args, base_dir, cache_dir)

@@ -562,7 +562,7 @@ def main():
         'demucs_crepe', 'bs_roformer_rmvpe', 'rmvpe',
         'bs_roformer', 'demucs', 'jdc', 'spice', 'fcn_f0'
     ]
-    parser = argparse.ArgumentParser(description="Evaluación MC-MSA para extracción de melodía con soporte para caché.")
+    parser = argparse.ArgumentParser(description="MC-MSA evaluation for melody extraction with cache support.")
     parser.add_argument("--method", type=str, default=None, 
                         choices=available_methods,
                         help="Extraction method to use")
@@ -697,21 +697,21 @@ def main():
     method_cache_dir = cache_dir / args.method
     if args.clear_cache:
         if method_cache_dir.exists():
-            print(f"\n[Caché] Deleting existing cache files for method '{args.method}' en {method_cache_dir}...")
+            print(f"\n[Cache] Deleting existing cache files for method '{args.method}' in {method_cache_dir}...")
             import shutil
             shutil.rmtree(method_cache_dir)
-            print("[Caché] Deletion completed.")
+            print("[Cache] Deletion completed.")
     else:
         if method_cache_dir.exists() and method_cache_dir.is_dir() and any(method_cache_dir.iterdir()):
-            ans = input(f"\n¿Desea eliminar la caché existente para el método '{args.method}' antes de comenzar? (s/n): ").strip().lower()
+            ans = input(f"\nDo you want to delete the existing cache for the method '{args.method}' before starting? (y/n): ").strip().lower()
             if ans in ['s', 'si', 'y', 'yes']:
-                print(f"[Caché] Deleting cache files at {method_cache_dir}...")
+                print(f"[Cache] Deleting cache files at {method_cache_dir}...")
                 import shutil
                 shutil.rmtree(method_cache_dir)
-                print("[Caché] Deletion completed.")
+                print("[Cache] Deletion completed.")
     
     if not orig_dir.exists() or not cover_dir.exists():
-        print(f"Source directories '{orig_dir}' y/o '{cover_dir}' no existen.")
+        print(f"Source directories '{orig_dir}' and/or '{cover_dir}' do not exist.")
         return
         
     orig_files = get_audio_files(orig_dir, match_mode=args.match_mode)
@@ -728,7 +728,7 @@ def main():
     else:
         methods = [args.method]
 
-    print(f"Total de pares (Original-Cover) encontrados: {len(common_ids)}")
+    print(f"Total pairs (Original-Cover) found: {len(common_ids)}")
     print("Methods to evaluate:")
     for m in methods:
         classification = METHOD_CLASSIFICATION.get(m, "Unknown")
@@ -749,7 +749,7 @@ def main():
 
     if not summary_path.exists():
         with open(summary_path, 'w') as f:
-            f.write("metodo,pares,lcs_promedio,mr,mrr,mdr,map,top5_prec,dtw_promedio\n")
+            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,avg_dtw\n")
 
     for method in methods:
         classification = METHOD_CLASSIFICATION.get(method, "Unknown")
@@ -768,9 +768,9 @@ def main():
                 cache_dir_method = cache_dir / method
                 tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
                 if tiny_path.exists():
-                    print(f"{prefix} [Caché] {file_path.name}")
+                    print(f"{prefix} [Cache] {file_path.name}")
                 else:
-                    print(f"{prefix} [Procesando] {file_path.name}...")
+                    print(f"{prefix} [Processing] {file_path.name}...")
                 
                 res_originals[uid] = load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=prefix)
                 gc.collect()
@@ -787,9 +787,9 @@ def main():
                 cache_dir_method = cache_dir / method
                 tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
                 if tiny_path.exists():
-                    print(f"{prefix} [Caché] {file_path.name}")
+                    print(f"{prefix} [Cache] {file_path.name}")
                 else:
-                    print(f"{prefix} [Procesando] {file_path.name}...")
+                    print(f"{prefix} [Processing] {file_path.name}...")
                 
                 res_covers[uid] = load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=prefix)
                 gc.collect()
@@ -818,9 +818,9 @@ def main():
             try:
                 with open(comp_cache_path, 'r', encoding='utf-8') as f:
                     comp_cache = json.load(f)
-                print(f"  [Caché] Loaded previous comparisons from {comp_cache_path.name}")
+                print(f"  [Cache] Loaded previous comparisons from {comp_cache_path.name}")
             except Exception as e:
-                print(f"  [Caché] Warning loading comparisons cache: {e}")
+                print(f"  [Cache] Warning loading comparisons cache: {e}")
         
         for i, uid_cover in enumerate(common_ids, 1):
             try:
@@ -970,9 +970,9 @@ def main():
                 comp_cache_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(comp_cache_path, 'w', encoding='utf-8') as f:
                     json.dump(comp_cache, f, indent=2)
-                print(f"\n  [Caché] Comparisons saved/updated at {comp_cache_path.name}")
+                print(f"\n  [Cache] Comparisons saved/updated at {comp_cache_path.name}")
             except Exception as e:
-                print(f"\n  [Caché] Warning saving comparisons cache: {e}")
+                print(f"\n  [Cache] Warning saving comparisons cache: {e}")
 
         # Metrics summary
         print(f"\n[{method}] Finished.")

@@ -51,7 +51,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
         output_dir = dataset_dir / output_dir
         
     if not orig_dir.exists() or not cover_dir.exists():
-        print(f"Las carpetas de origen '{orig_dir}' y/o '{cover_dir}' no existen en {dataset_dir.name}. Saltando...")
+        print(f"Source directories '{orig_dir}' and/or '{cover_dir}' do not exist in {dataset_dir.name}. Skipping...")
         return
         
     orig_files = get_audio_files(orig_dir, match_mode=args.match_mode)
@@ -64,14 +64,14 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
         common_ids = sorted(list(set(orig_files.keys()).intersection(set(cover_files.keys()))))
         
     print("\n" + "="*80)
-    print(f" PROCESANDO DATASET (CON OPTUNA): {dataset_dir.name} ({len(common_ids)} pares encontrados)")
+    print(f" PROCESSING DATASET (WITH OPTUNA): {dataset_dir.name} ({len(common_ids)} pairs found)")
     print("="*80)
     
     if not common_ids:
-        print("No se encontraron pares válidos. Saltando...")
+        print("No valid pairs found. Skipping...")
         return
 
-    print("Métodos a evaluar:")
+    print("Methods to evaluate:")
     for m in methods:
         classification = METHOD_CLASSIFICATION.get(m, "Unknown")
         print(f"  - {m}: {classification}")
@@ -93,11 +93,11 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
 
     if not summary_path.exists():
         with open(summary_path, 'w') as f:
-            f.write("metodo,pares,lcs_promedio,mr,mrr,mdr,map,top5_prec,top10_prec,dtw_promedio,min_voicing_thresh,slope_epsilon,energy_tau\n")
+            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw,min_voicing_thresh,slope_epsilon,energy_tau\n")
 
     for method in methods:
         classification = METHOD_CLASSIFICATION.get(method, "Unknown")
-        print(f"\n[{method}] Cargando/Poblando caché... ({classification})")
+        print(f"\n[{method}] Loading/Populating cache... ({classification})")
         analyzer = MelodyAnalyzer(extraction_method=method, classifier=default_classifier)
         
         out_method_dir = output_dir / method
@@ -112,15 +112,15 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                 cache_dir_method = cache_dir / method
                 tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
                 if tiny_path.exists():
-                    print(f"{prefix} [Caché] {file_path.name}")
+                    print(f"{prefix} [Cache] {file_path.name}")
                 else:
-                    print(f"{prefix} [Procesando] {file_path.name}...")
+                    print(f"{prefix} [Processing] {file_path.name}...")
                 res_originals[uid] = load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=prefix)
                 gc.collect()
             except Exception as e:
-                print(f"\nError analizando original {uid} ({method}): {e}")
+                print(f"\nError analyzing original {uid} ({method}): {e}")
                 res_originals[uid] = None
-        print(f"  Originales cargados y cacheados.")
+        print(f"  Originals loaded and cached.")
 
         res_covers = {}
         for i, uid in enumerate(common_ids, 1):
@@ -130,18 +130,18 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                 cache_dir_method = cache_dir / method
                 tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
                 if tiny_path.exists():
-                    print(f"{prefix} [Caché] {file_path.name}")
+                    print(f"{prefix} [Cache] {file_path.name}")
                 else:
-                    print(f"{prefix} [Procesando] {file_path.name}...")
+                    print(f"{prefix} [Processing] {file_path.name}...")
                 res_covers[uid] = load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=prefix)
                 gc.collect()
             except Exception as e:
-                print(f"\nError analizando cover {uid} ({method}): {e}")
+                print(f"\nError analyzing cover {uid} ({method}): {e}")
                 res_covers[uid] = None
-        print(f"  Covers cargados y cacheados.")
+        print(f"  Covers loaded and cached.")
 
         # --- OPTUNA PHASE: LIGHTWEIGHT IN-MEMORY LOADING ---
-        print("\nCargando características y segmentos desde la caché JSON para Optuna...")
+        print("\nLoading features and segments from JSON cache for Optuna...")
         optuna_originals = {}
         optuna_covers = {}
         
@@ -156,7 +156,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                         'segments': segments
                     }
                 except Exception as e:
-                    print(f"  Error al cargar original {uid} para Optuna: {e}")
+                    print(f"  Error loading original {uid} for Optuna: {e}")
                     optuna_originals[uid] = None
             else:
                 optuna_originals[uid] = None
@@ -171,12 +171,12 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                         'segments': segments
                     }
                 except Exception as e:
-                    print(f"  Error al cargar cover {uid} para Optuna: {e}")
+                    print(f"  Error loading cover {uid} for Optuna: {e}")
                     optuna_covers[uid] = None
             else:
                 optuna_covers[uid] = None
 
-        print("Datos cargados en memoria. Iniciando optimización con Optuna...")
+        print("Data loaded in memory. Starting Optuna optimization...")
         
         # Optuna options
         optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -241,9 +241,9 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
         best_value = study.best_value
         
         print("\n" + "*"*60)
-        print(f" OPTIMIZACIÓN COMPLETADA PARA EL MÉTODO: {method.upper()}")
-        print(f" Mejor {args.optuna_metric.upper()} en entrenamiento: {best_value:.4f}")
-        print(" Parámetros óptimos:")
+        print(f" OPTIMIZATION COMPLETED FOR METHOD: {method.upper()}")
+        print(f" Best training {args.optuna_metric.upper()}: {best_value:.4f}")
+        print(" Optimal parameters:")
         for k, v in best_params.items():
             print(f"   - {k}: {v:.6f}")
         print("*"*60 + "\n")
@@ -270,7 +270,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
         gc.collect()
 
         # --- FINAL EVALUATION OF RESULTS WITH OPTIMAL PARAMETERS ---
-        print("Ejecutando evaluación final con los parámetros optimizados...")
+        print("Running final evaluation with optimized parameters...")
         
         lcs_list, dtw_list, mrr_sum, top5_hits, top10_hits, valid_count = [], [], 0.0, 0, 0, 0
         ranks_list = []
@@ -291,13 +291,13 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
             try:
                 with open(comp_cache_path, 'r', encoding='utf-8') as f:
                     comp_cache = json.load(f)
-                print(f"  [Caché] Cargadas comparaciones previas desde {comp_cache_path.name}")
+                print(f"  [Cache] Loaded previous comparisons from {comp_cache_path.name}")
             except Exception as e:
-                print(f"  [Caché] Advertencia al cargar caché de comparaciones: {e}")
+                print(f"  [Cache] Warning loading comparisons cache: {e}")
         
         for i, uid_cover in enumerate(common_ids, 1):
             try:
-                print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Comparando cover: ID {uid_cover}...", end='\r')
+                print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Comparing cover: ID {uid_cover}...", end='\r')
                 if res_covers[uid_cover] is None: continue
                 
                 seq_cover = res_covers[uid_cover]['seq']
@@ -429,7 +429,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                     id_label = f"ID {uid_cover:02d}" if isinstance(uid_cover, int) else f"ID {uid_cover}"
                     detailed_results.append(f"{id_label} | LCS: {true_sim:.4f} | Rank: {rank:2d} | DTW: {correct_dtw:.4f}")
             except Exception as e:
-                print(f"\nError procesando cover {uid_cover} ({method}): {e}")
+                print(f"\nError processing cover {uid_cover} ({method}): {e}")
             finally:
                 if 'res_cover' in locals():
                     del res_cover
@@ -442,12 +442,12 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                 comp_cache_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(comp_cache_path, 'w', encoding='utf-8') as f:
                     json.dump(comp_cache, f, indent=2)
-                print(f"\n  [Caché] Comparaciones guardadas/actualizadas en {comp_cache_path.name}")
+                print(f"\n  [Cache] Comparisons saved/updated at {comp_cache_path.name}")
             except Exception as e:
-                print(f"\n  [Caché] Advertencia al guardar caché de comparaciones: {e}")
+                print(f"\n  [Cache] Warning saving comparisons cache: {e}")
 
         # Summary metrics
-        print(f"\n[{method}] Finalizado.")
+        print(f"\n[{method}] Finished.")
         avg_lcs = np.mean(lcs_list) if lcs_list else 0
         mr = np.mean(ranks_list) if ranks_list else 0
         mrr = mrr_sum / valid_count if valid_count else 0
@@ -522,7 +522,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                 ("Pitch Class Histogram (Chroma Cosine)", best_thresh_ph, best_metrics_ph),
                 ("DTW Distance (Optimal Path)", best_thresh_dtw, best_metrics_dtw)
             ]:
-                f.write(f"--- Metrica: {m_name} ---\n")
+                f.write(f"--- Metric: {m_name} ---\n")
                 if best_m:
                     f.write(f"  Optimal Threshold:  {best_t:.4f}\n")
                     f.write(f"  F1-Score:       {best_m['f1_score']:.4f}\n")
@@ -544,7 +544,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
 
         # Qualitative plots for the best match of this method
         if best_uid is not None:
-            print(f"\n[{method}] Generando gráficas cualitativas finales usando el clasificador optimizado (Mejor Match ID {best_uid})...")
+            print(f"\n[{method}] Generating final qualitative plots using optimized classifier (Best Match ID {best_uid})...")
             try:
                 from src.melody_analysis_v2.visualization import (
                     plot_melspectrogram, plot_melody_contour, plot_melody_only,
@@ -556,7 +556,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                 title_orig = f"{meta_orig[0]} ({meta_orig[1]})"
                 title_cover = f"{meta_cover[0]} ({meta_cover[1]})"
                 
-                print(f"  Procesando Original (ID {best_uid})...")
+                print(f"  Processing Original (ID {best_uid})...")
                 res_orig_best = analyzer.analyze_file(str(orig_files[best_uid]))
                 
                 # Novelty, SSM, Contours
@@ -575,11 +575,11 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                     plot_melspectrogram(audio_plot, sr_plot, output_path=out_method_dir / "fig_melspectrogram_orig.png", title=f"Mel-spectrogram (Original)\nSong: {title_orig}")
                     del audio_plot
                 except Exception as spec_err:
-                    print(f"  Advertencia graficando espectrograma (orig): {spec_err}")
+                    print(f"  Warning plotting spectrogram (orig): {spec_err}")
                 
                 plt.close('all')
                 
-                print(f"  Procesando Cover (ID {best_uid})...")
+                print(f"  Processing Cover (ID {best_uid})...")
                 res_cover_best = analyzer.analyze_file(str(cover_files[best_uid]))
                 
                 # Novelty, SSM, Contours
@@ -598,7 +598,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                     plot_melspectrogram(audio_plot, sr_plot, output_path=out_method_dir / "fig_melspectrogram_cover.png", title=f"Mel-spectrogram (Cover)\nSong: {title_cover}")
                     del audio_plot
                 except Exception as spec_err:
-                    print(f"  Advertencia graficando espectrograma (cover): {spec_err}")
+                    print(f"  Warning plotting spectrogram (cover): {spec_err}")
                 
                 plt.close('all')
                 
@@ -610,19 +610,19 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
                 plot_melody_and_energy_comparison(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_contour_and_energy.png", meta_orig=meta_orig, meta_cover=meta_cover)
                 
                 # Export 9 diagram steps for Best Match
-                print(f"  Exportando 9 pasos del diagrama para el Mejor Match (ID {best_uid})...")
+                print(f"  Exporting 9 diagram steps for Best Match (ID {best_uid})...")
                 exporter_orig = DiagramExporter(out_method_dir / "diagrama_pasos_original")
                 exporter_orig.export_all(str(orig_files[best_uid]), method=method)
                 
                 exporter_cover = DiagramExporter(out_method_dir / "diagrama_pasos_cover")
                 exporter_cover.export_all(str(cover_files[best_uid]), method=method)
                 
-                print(f"  Gráficas generadas exitosamente en {out_method_dir}")
+                print(f"  Plots generated successfully at {out_method_dir}")
                 
                 del res_orig_best, res_cover_best
                 gc.collect()
             except Exception as plot_err:
-                print(f"  Error al generar gráficas: {plot_err}")
+                print(f"  Error generating plots: {plot_err}")
             finally:
                 plt.close('all')
                 gc.collect()
@@ -667,7 +667,7 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     lines = []
     divider_len = 160 if has_opt_params else 120
     lines.append("-" * divider_len)
-    lines.append(f"Dataset: {dataset_name} (Optimizado con Optuna)")
+    lines.append(f"Dataset: {dataset_name} (Optimized with Optuna)")
     lines.append("-" * divider_len)
     
     # Header line
@@ -701,10 +701,10 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
             return default
 
         try:
-            lcs = get_val("lcs_promedio" if "lcs_promedio" in header_indices else "avg_lcs", is_pct=True) + "%"
+            lcs = get_val("avg_lcs" if "avg_lcs" in header_indices else "lcs_promedio", is_pct=True) + "%"
             mrr = get_val("mrr", is_pct=True) + "%"
             top5 = get_val("top5_prec", is_pct=True) + "%"
-            dtw = get_val("dtw_promedio" if "dtw_promedio" in header_indices else "avg_dtw")
+            dtw = get_val("avg_dtw" if "avg_dtw" in header_indices else "dtw_promedio")
             
             row_cols = [f"{method_disp:<25}", f"{lcs:>12}"]
             if has_mr:
@@ -756,32 +756,32 @@ def main():
         'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
         'bs_roformer', 'demucs', 'ensemble'
     ]
-    parser = argparse.ArgumentParser(description="Evaluación MC-MSA para extracción de melodía optimizando el clasificador con Optuna.")
+    parser = argparse.ArgumentParser(description="MC-MSA evaluation for melody extraction optimizing the classifier with Optuna.")
     parser.add_argument("--method", type=str, default=None, 
                         choices=available_methods,
-                        help="Método de extracción a utilizar")
+                        help="Extraction method to use")
     parser.add_argument("--dataset_dir", type=str, default=None,
-                        help="Directorio base del dataset")
+                        help="Base directory of the dataset")
     parser.add_argument("--orig_subdir", type=str, default="originales",
-                        help="Subdirectorio de canciones originales")
+                        help="Subdirectory of original songs")
     parser.add_argument("--cover_subdir", type=str, default="covers",
-                        help="Subdirectorio de canciones covers")
+                        help="Subdirectory of cover songs")
     parser.add_argument("--output_dir", type=str, default="resultados_mc_msa_optuna",
-                        help="Directorio para salidas (resuelto dentro de la carpeta del dataset si es relativo)")
+                        help="Output directory (resolved within dataset folder if relative)")
     parser.add_argument("--cache_dir", type=str, default="cache",
-                        help="Directorio para la caché de análisis JSON")
+                        help="Directory for JSON analysis cache")
     parser.add_argument("--match_mode", type=str, default=None,
                         choices=["id", "stem", "fuzzy"],
-                        help="Método de emparejamiento")
+                        help="Match method")
     parser.add_argument("--dtw_all_pairs", action="store_true",
-                        help="Calcular DTW para todos los pares")
+                        help="Compute DTW for all pairs")
     parser.add_argument("--clear_cache", action="store_true",
-                        help="Eliminar la caché del método seleccionado antes de comenzar")
+                        help="Delete cache of the selected method before starting")
     parser.add_argument("--optuna_trials", type=int, default=100,
-                        help="Número de ensayos/trials para la optimización de Optuna")
+                        help="Number of trials for Optuna optimization")
     parser.add_argument("--optuna_metric", type=str, default="mrr",
                         choices=["mrr", "lcs"],
-                        help="Métrica a maximizar con Optuna (mrr o lcs)")
+                        help="Metric to maximize with Optuna (mrr or lcs)")
     args = parser.parse_args()
 
     base_dir = Path(__file__).parent.absolute()
@@ -790,19 +790,19 @@ def main():
     if args.dataset_dir is None:
         datasets = find_available_datasets(base_dir)
         if not datasets:
-            print("\nNo se detectaron carpetas de dataset automáticamente en el directorio base.")
-            manual = input("Por favor ingrese la ruta o nombre del dataset a utilizar: ").strip()
+            print("\nNo dataset folders automatically detected in the base directory.")
+            manual = input("Please enter the path or name of the dataset to use: ").strip()
             args.dataset_dir = manual
         else:
-            print("\n=== Selección de Dataset (Optuna) ===")
+            print("\n=== Dataset Selection (Optuna) ===")
             for i, d in enumerate(datasets, 1):
                 print(f"{i}. {d}")
-            print(f"{len(datasets) + 1}. [Procesar TODOS los datasets de una vez]")
-            print(f"{len(datasets) + 2}. [Ingresar otra ruta manual...]")
+            print(f"{len(datasets) + 1}. [Process ALL datasets at once]")
+            print(f"{len(datasets) + 2}. [Enter another manual path...]")
             
             while True:
                 try:
-                    choice = input(f"\nSeleccione un dataset (1-{len(datasets) + 2}): ").strip()
+                    choice = input(f"\nSelect a dataset (1-{len(datasets) + 2}): ").strip()
                     idx = int(choice) - 1
                     if 0 <= idx < len(datasets):
                         args.dataset_dir = datasets[idx]
@@ -811,12 +811,12 @@ def main():
                         args.dataset_dir = "all"
                         break
                     elif idx == len(datasets) + 1:
-                        manual = input("Ingrese la ruta o nombre del dataset: ").strip()
+                        manual = input("Enter the path or name of the dataset: ").strip()
                         if manual:
                             args.dataset_dir = manual
                             break
                     else:
-                        print(f"Error: Por favor seleccione un número entre 1 y {len(datasets) + 2}.")
+                        print(f"Error: Please select a number between 1 and {len(datasets) + 2}.")
                 except ValueError:
                     if choice in datasets:
                         args.dataset_dir = choice
@@ -824,11 +824,11 @@ def main():
                     elif choice.lower() == "all":
                         args.dataset_dir = "all"
                         break
-                    print("Error: Entrada no válida.")
+                    print("Error: Invalid input.")
 
     # Interactive Method selection if not defined via CLI
     if args.method is None:
-        print("\n=== Selección de Método de Extracción (Optuna) ===")
+        print("\n=== Extraction Method Selection (Optuna) ===")
         f0_methods = ['pyin', 'yin', 'crepe', 'ensemble', 'rmvpe', 'spice', 'jdc', 'fcn_f0']
         melody_methods = [
             'poliner', 'durrieu', 'tachibana', 'melodia', 'basic_pitch',
@@ -840,36 +840,36 @@ def main():
         idx_map = {}
         curr_idx = 1
         
-        print("\n--- Extractores de F0 ---")
+        print("\n--- F0 Extractors ---")
         for m in f0_methods:
             print(f"  {curr_idx:2d}. {m}")
             idx_map[curr_idx] = m
             curr_idx += 1
-        print(f"  {curr_idx:2d}. {'all_f0':<20} [Todos los extractores de F0]")
+        print(f"  {curr_idx:2d}. {'all_f0':<20} [All F0 extractors]")
         idx_map[curr_idx] = 'all_f0'
         curr_idx += 1
         
-        print("\n--- Extractores de Melodía ---")
+        print("\n--- Melody Extractors ---")
         for m in melody_methods:
             print(f"  {curr_idx:2d}. {m}")
             idx_map[curr_idx] = m
             curr_idx += 1
-        print(f"  {curr_idx:2d}. {'all_melody':<20} [Todos los extractores de Melodía]")
+        print(f"  {curr_idx:2d}. {'all_melody':<20} [All Melody extractors]")
         idx_map[curr_idx] = 'all_melody'
         curr_idx += 1
         
-        print("\n--- Otros / Especiales ---")
+        print("\n--- Others / Specials ---")
         for m in other_methods:
             classification = METHOD_CLASSIFICATION.get(m, "")
             print(f"  {curr_idx:2d}. {m:<20} [{classification}]")
             idx_map[curr_idx] = m
             curr_idx += 1
-        print(f"  {curr_idx:2d}. {'all':<20} [Todos los métodos]")
+        print(f"  {curr_idx:2d}. {'all':<20} [All methods]")
         idx_map[curr_idx] = 'all'
         
         while True:
             try:
-                choice = input(f"\nSeleccione un método (1-{curr_idx}): ").strip()
+                choice = input(f"\nSelect a method (1-{curr_idx}): ").strip()
                 if choice.lower() in available_methods:
                     args.method = choice.lower()
                     break
@@ -878,22 +878,22 @@ def main():
                     args.method = idx_map[idx]
                     break
                 else:
-                    print(f"Error: Por favor seleccione un número entre 1 y {curr_idx}.")
+                    print(f"Error: Please select a number between 1 and {curr_idx}.")
             except ValueError:
                 if choice.strip().lower() in available_methods:
                     args.method = choice.strip().lower()
                     break
-                print("Error: Entrada no válida.")
+                print("Error: Invalid input.")
 
     # Interactive Matching selection if not defined via CLI
     if args.match_mode is None:
-        print("\n=== Selección de Método de Emparejamiento (Optuna) ===")
-        print("1. Por ID Numérico (ej: '01 - Pedro Infante.wav' con '01 - Cover.mp3')")
-        print("2. Por Nombre / Stem Exacto (ej: 'Te_Vi_Venir_Original.wav' con 'Te Vi Venir (Covers).mp3')")
-        print("3. Emparejamiento Inteligente / Fuzzy (Para nombres complejos o música clásica)")
+        print("\n=== Match Method Selection (Optuna) ===")
+        print("1. By Numeric ID (e.g. '01 - Pedro Infante.wav' with '01 - Cover.mp3')")
+        print("2. By Exact Name / Stem (e.g. 'Te_Vi_Venir_Original.wav' with 'Te Vi Venir (Covers).mp3')")
+        print("3. Smart / Fuzzy Match (For complex names or classical music)")
         
         while True:
-            choice = input("\nSeleccione el método (1-3) [Por defecto: 1]: ").strip()
+            choice = input("\nSelect match method (1-3) [Default: 1]: ").strip()
             if not choice or choice == "1":
                 args.match_mode = "id"
                 break
@@ -904,7 +904,7 @@ def main():
                 args.match_mode = "fuzzy"
                 break
             else:
-                print("Error: Por favor seleccione 1, 2 o 3.")
+                print("Error: Please select 1, 2 or 3.")
 
     cache_dir = Path(args.cache_dir)
     if not cache_dir.is_absolute():
@@ -933,20 +933,20 @@ def main():
         for m in methods:
             method_cache_dir = cache_dir / m
             if method_cache_dir.exists():
-                print(f"[Caché] Eliminando caché para '{m}' en {method_cache_dir}...")
+                print(f"[Cache] Deleting cache for '{m}' at {method_cache_dir}...")
                 import shutil
                 shutil.rmtree(method_cache_dir)
     else:
         any_cache_exists = any((cache_dir / m).exists() and (cache_dir / m).is_dir() and any((cache_dir / m).iterdir()) for m in methods)
         if any_cache_exists:
-            ans = input(f"\n¿Desea eliminar la caché existente para los métodos a evaluar antes de comenzar? (s/n): ").strip().lower()
+            ans = input(f"\nDo you want to delete the existing cache for the methods to evaluate before starting? (y/n): ").strip().lower()
             if ans in ['s', 'si', 'y', 'yes']:
                 for m in methods:
                     method_cache_dir = cache_dir / m
                     if method_cache_dir.exists():
                         import shutil
                         shutil.rmtree(method_cache_dir)
-                print("[Caché] Eliminación completada.")
+                print("[Cache] Deletion completed.")
 
     # Determine datasets to process
     if args.dataset_dir == "all":
@@ -968,7 +968,7 @@ def main():
         try:
             run_single_dataset_optuna_mc_msa(dataset_dir, methods, args, base_dir, cache_dir)
         except Exception as e:
-            print(f"\nError al procesar dataset '{dataset_dir.name}': {e}")
+            print(f"\nError processing dataset '{dataset_dir.name}': {e}")
             import traceback
             traceback.print_exc()
 

@@ -144,7 +144,7 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     lines = []
     divider_len = 160 if has_opt_params else 120
     lines.append("-" * divider_len)
-    lines.append(f"Dataset: {dataset_name}" + (" (Optimizado con Optuna)" if has_opt_params else ""))
+    lines.append(f"Dataset: {dataset_name}" + (" (Optimized with Optuna)" if has_opt_params else ""))
     lines.append("-" * divider_len)
     
     hdr_cols = [f"{'Method':<25}", f"{'Avg. LCS (%)':<14}"]
@@ -177,10 +177,10 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
             return default
 
         try:
-            lcs = get_val("lcs_promedio" if "lcs_promedio" in header_indices else "avg_lcs", is_pct=True) + "%"
+            lcs = get_val("avg_lcs" if "avg_lcs" in header_indices else "lcs_promedio", is_pct=True) + "%"
             mrr = get_val("mrr", is_pct=True) + "%"
             top5 = get_val("top5_prec", is_pct=True) + "%"
-            dtw = get_val("dtw_promedio" if "dtw_promedio" in header_indices else "avg_dtw")
+            dtw = get_val("avg_dtw" if "avg_dtw" in header_indices else "dtw_promedio")
             
             row_cols = [f"{method_disp:<25}", f"{lcs:>12}"]
             if has_mr:
@@ -365,13 +365,13 @@ def main():
     # 4. Method Selection
     selected_methods = sorted(methods_found)
     if args.method is None:
-        print(f"\n=== Selección de Método para '{dataset_dir.name}' ===")
-        print("1. [Todos los métodos encontrados en la caché] (Por defecto)")
+        print(f"\n=== Method Selection for '{dataset_dir.name}' ===")
+        print("1. [All methods found in cache] (Default)")
         for idx, (m_name, _) in enumerate(sorted(methods_found), 2):
             print(f"{idx:2d}. {m_name}")
             
         while True:
-            choice = input(f"\nSeleccione una opción (1-{len(methods_found) + 1}) [Por defecto: 1]: ").strip()
+            choice = input(f"\nSelect an option (1-{len(methods_found) + 1}) [Default: 1]: ").strip()
             if not choice or choice == "1":
                 # Keep selected_methods as all methods
                 break
@@ -381,7 +381,7 @@ def main():
                     selected_methods = [sorted(methods_found)[idx - 2]]
                     break
                 else:
-                    print(f"Error: Por favor seleccione un número entre 1 y {len(methods_found) + 1}.")
+                    print(f"Error: Please select a number between 1 and {len(methods_found) + 1}.")
             except ValueError:
                 # check if they typed the name of the method directly
                 exact_match = [m for m in methods_found if m[0] == choice.lower()]
@@ -390,7 +390,7 @@ def main():
                     break
                 if choice.lower() in ['all', 'todos', 't']:
                     break
-                print("Error: Entrada no válida. Ingrese el número de opción o el nombre exacto.")
+                print("Error: Invalid input. Enter option number or exact name.")
     elif args.method.lower() != 'all':
         # Filter for the specific method requested
         selected_methods = [m for m in methods_found if m[0] == args.method.lower()]
@@ -439,7 +439,7 @@ def main():
 
     with open(summary_path, 'w', encoding='utf-8') as f:
         if args.optuna:
-            f.write("metodo,pares,lcs_promedio,mr,mrr,mdr,map,top5_prec,top10_prec,dtw_promedio,min_voicing_thresh,slope_epsilon,energy_tau\n")
+            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw,min_voicing_thresh,slope_epsilon,energy_tau\n")
         else:
             f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw\n")
         for row in other_rows:
