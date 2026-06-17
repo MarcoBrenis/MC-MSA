@@ -12,8 +12,8 @@ from src.melody_analysis_v2.classifier_paper import calculate_lcs
 from src.melody_analysis_v2.segmenter import MelodySegment
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
 
-# We reuse plotting functions from run_benchmark
-from run_benchmark import (
+# We reuse plotting functions from run_mc_msa_beta
+from run_mc_msa_beta import (
     plot_caplin_bands, 
     plot_caplin_contour,
     plot_boundary_detection,
@@ -54,7 +54,7 @@ def load_or_analyze(analyzer, file_path, method, cache_dir):
 
 def main():
     available_methods = ['all', 'pyin', 'melodia', 'crepe', 'ensemble', 'demucs_crepe', 'bs_roformer_rmvpe', 'rmvpe']
-    parser = argparse.ArgumentParser(description="Tiny Benchmark with method and cache support.")
+    parser = argparse.ArgumentParser(description="Tiny MC-MSA with method and cache support.")
     parser.add_argument("--method", type=str, default=None, 
                         choices=available_methods,
                         help="Extraction method to use")
@@ -98,12 +98,12 @@ def main():
     common_ids = [2, 4]
     
     if args.method == 'all':
-        methods = ['crepe', 'bs_roformer_rmvpe']
+        methods = [m for m in available_methods if m != 'all']
     else:
         methods = [args.method]
 
     classifier = MelodyClassifierPaper()
-    print(f"\nStarting TINY BENCHMARK | Methods: {methods}")
+    print(f"\nStarting TINY MC-MSA | Methods: {methods}")
     
     for method in methods:
         print(f"\n[{method}] Analyzing...")
@@ -112,9 +112,15 @@ def main():
         res_originals = {}
         total_p = len(common_ids)
         for i, uid in enumerate(common_ids, 1):
-            print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Loading original: ID {uid}...", end='\r')
-            res_originals[uid] = load_or_analyze(analyzer, orig_files[uid], method, cache_dir)
-        print(f"\n  Originals loaded.")
+            file_path = orig_files[uid]
+            prefix = f"  [{i}/{total_p}] ({i/total_p:.1%}) [Original] [{method}]"
+            cache_path = cache_dir / method / f"{file_path.stem}.json"
+            if cache_path.exists():
+                print(f"{prefix} [Caché] {file_path.name}")
+            else:
+                print(f"{prefix} [Procesando] {file_path.name}...")
+            res_originals[uid] = load_or_analyze(analyzer, file_path, method, cache_dir)
+        print(f"  Originals loaded.")
         
         lcs_correct_list, dtw_correct_list, mrr_sum, top5_hits, valid_covers = [], [], 0.0, 0, 0
         ranks_list = []
@@ -122,8 +128,14 @@ def main():
         detailed_results = []
         
         for i, uid_cover in enumerate(common_ids, 1):
-            print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Loading cover: ID {uid_cover}...", end='\r')
-            res_cover = load_or_analyze(analyzer, cover_files[uid_cover], method, cache_dir)
+            file_path = cover_files[uid_cover]
+            prefix = f"  [{i}/{total_p}] ({i/total_p:.1%}) [Cover] [{method}]"
+            cache_path = cache_dir / method / f"{file_path.stem}.json"
+            if cache_path.exists():
+                print(f"{prefix} [Caché] {file_path.name}")
+            else:
+                print(f"{prefix} [Procesando] {file_path.name}...")
+            res_cover = load_or_analyze(analyzer, file_path, method, cache_dir)
             seq_cover = [s.label for s in res_cover.segments]
             
             pitch_midi_c = res_cover.features.pitch_midi
@@ -154,7 +166,7 @@ def main():
                     best_uid = uid_cover
                     best_pair_res = (res_originals[uid_cover], res_cover)
                     print(f"\n  [Best Match] ID {uid_cover} with LCS={best_lcs:.4f}. Generating complete plots...")
-                    out_dir = base_dir / "salidas_tiny_benchmark" / method
+                    out_dir = base_dir / "salidas_tiny_mc_msa" / method
                     out_dir.mkdir(parents=True, exist_ok=True)
                     plot_caplin_bands(best_pair_res[0], best_pair_res[1], out_dir / "fig_qualitative_bands.pdf")
                     plot_caplin_contour(best_pair_res[0], best_pair_res[1], out_dir / "fig_qualitative_contour.pdf")
@@ -209,11 +221,11 @@ def main():
         print(f"\n[{method}] Summary | LCS: {avg_lcs:.4f} | MR: {mr:.2f} | MRR: {mrr:.4f} | MDR: {mdr:.1f} | MAP: {map_val:.4f} | Top5: {top5_prec:.1%} | DTW: {avg_dtw:.4f}")
         
         # Detailed TXT Report
-        out_method_dir = base_dir / "salidas_tiny_benchmark" / method
+        out_method_dir = base_dir / "salidas_tiny_mc_msa" / method
         out_method_dir.mkdir(parents=True, exist_ok=True)
-        report_path = out_method_dir / "reporte_detallado.txt"
+        report_path = out_method_dir / "detailed_report.txt"
         with open(report_path, 'w') as f:
-            f.write(f"DETAILED REPORT - TINY BENCHMARK - METHOD: {method}\n")
+            f.write(f"DETAILED REPORT - TINY MC-MSA - METHOD: {method}\n")
             f.write("="*50 + "\n")
             if best_uid is not None:
                 f.write(f"IMAGES GENERATED FOR THE BEST MATCH (LCS = {best_lcs:.4f}):\n")

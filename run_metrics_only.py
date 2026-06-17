@@ -110,7 +110,7 @@ def pair_files_fuzzy(orig_files: dict, cover_files: dict) -> tuple:
     return paired_orig, paired_cover
 
 def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
-    summary_path = output_dir / "benchmark_summary.csv"
+    summary_path = output_dir / "mc_msa_summary.csv"
     if not summary_path.exists():
         print(f"[Comparative Table] Summary file not found at {summary_path}")
         return
@@ -216,7 +216,7 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     lines.append("-" * divider_len)
     
     table_content = "\n".join(lines) + "\n"
-    table_filename = "tabla_comparativa_recalculada_optuna.txt" if "optuna" in output_dir.name else "tabla_comparativa_recalculada.txt"
+    table_filename = "comparative_table_recalculated_optuna.txt" if "optuna" in output_dir.name else "comparative_table_recalculated.txt"
     table_path = dataset_dir / table_filename
     try:
         table_path.write_text(table_content, encoding='utf-8')
@@ -245,7 +245,7 @@ def main():
                         help="Match mode used to pair originals and covers")
     parser.add_argument("--optuna", type=str, default=None,
                         choices=["y", "n", "s", "no", "yes"],
-                        help="Process Optuna hyperparameter benchmarks (y/n)")
+                        help="Process Optuna hyperparameter MC-MSA evaluations (y/n)")
     args = parser.parse_args()
 
     base_dir = Path(__file__).parent.absolute()
@@ -398,11 +398,11 @@ def main():
             print(f"Requested method '{args.method}' not found in cache for dataset '{dataset_dir.name}'.")
             return
 
-    output_subdir = "resultados_benchmark_optuna" if args.optuna else "resultados_benchmark"
+    output_subdir = "resultados_mc_msa_optuna" if args.optuna else "resultados_mc_msa"
     output_dir = dataset_dir / output_subdir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    summary_path = output_dir / "benchmark_summary.csv"
+    summary_path = output_dir / "mc_msa_summary.csv"
     
     # Read existing parameters if we are in optuna mode to avoid losing them
     existing_params = {}
@@ -552,7 +552,7 @@ def main():
         # Save detailed report
         out_method_dir = output_dir / method
         out_method_dir.mkdir(parents=True, exist_ok=True)
-        report_path = out_method_dir / "reporte_detallado.txt"
+        report_path = out_method_dir / "detailed_report.txt"
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(f"DETAILED REPORT - METHOD: {method}\n")
             f.write(f"==================================================\n")

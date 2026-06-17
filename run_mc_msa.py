@@ -346,7 +346,7 @@ def load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix="
         "--cache_dir", str(cache_dir),
         "--label_prefix", label_prefix
     ]
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, stdout=subprocess.DEVNULL, check=True)
     
     # Once completed, the normal cache .json is already saved on disk.
     res = load_or_analyze(analyzer, file_path, method, cache_dir)
@@ -697,7 +697,7 @@ def plot_melody_and_energy_comparison(res_orig, res_cover, output_path: Path, me
     plt.close()
 
 def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
-    summary_path = output_dir / "benchmark_summary.csv"
+    summary_path = output_dir / "mc_msa_summary.csv"
     if not summary_path.exists():
         print(f"[Comparative Table] Summary file not found at {summary_path}")
         return
@@ -806,7 +806,7 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     lines.append("-" * divider_len)
     
     table_content = "\n".join(lines) + "\n"
-    table_path = dataset_dir / "tabla_comparativa.txt"
+    table_path = dataset_dir / "comparative_table.txt"
     try:
         table_path.write_text(table_content, encoding='utf-8')
         print(f"\n[Comparative Table] Successfully saved at {table_path}")
@@ -834,7 +834,7 @@ def main():
         'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
         'bs_roformer', 'demucs', 'ensemble'
     ]
-    parser = argparse.ArgumentParser(description="Melody extraction benchmark with cache support.")
+    parser = argparse.ArgumentParser(description="Melody extraction MC-MSA with cache support.")
     parser.add_argument("--method", type=str, default=None, 
                         choices=available_methods,
                         help="Extraction method to use")
@@ -844,7 +844,7 @@ def main():
                         help="Subdirectory of original songs")
     parser.add_argument("--cover_subdir", type=str, default="covers",
                         help="Subdirectory of cover songs")
-    parser.add_argument("--output_dir", type=str, default="resultados_benchmark",
+    parser.add_argument("--output_dir", type=str, default="resultados_mc_msa",
                         help="Directory for graphical outputs and reports (if relative, resolves inside dataset folder)")
     parser.add_argument("--cache_dir", type=str, default="cache",
                         help="Directory for JSON analysis cache")
@@ -901,13 +901,13 @@ def main():
     if args.method is None:
         print("\n=== Extraction Method Selection ===")
         
-        f0_methods = ['pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0']
+        f0_methods = ['pyin', 'yin', 'crepe', 'ensemble', 'rmvpe', 'spice', 'jdc', 'fcn_f0']
         melody_methods = [
             'poliner', 'durrieu', 'tachibana', 'melodia', 'basic_pitch',
             'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
             'bs_roformer', 'demucs'
         ]
-        other_methods = ['ensemble']
+        other_methods = []
         
         idx_map = {}
         curr_idx = 1
@@ -983,9 +983,9 @@ def main():
                 print("Error: Please select 1, 2 or 3.")
                 
     args.match_by_stem = (args.match_mode == "stem")
-    run_benchmark_execution(args, base_dir)
+    run_mc_msa_execution(args, base_dir)
 
-def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_dir: Path, cache_dir: Path):
+def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: Path, cache_dir: Path):
     orig_dir = dataset_dir / args.orig_subdir
     cover_dir = dataset_dir / args.cover_subdir
     
@@ -1020,7 +1020,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
         print(f"  - {m}: {classification}")
 
     classifier = MelodyClassifierPaper()
-    summary_path = output_dir / "benchmark_summary.csv"
+    summary_path = output_dir / "mc_msa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     # Check if summary_path exists but has old format, delete it to avoid column mismatch
     if summary_path.exists():
@@ -1049,7 +1049,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
         for i, uid in enumerate(common_ids, 1):
             try:
                 file_path = orig_files[uid]
-                prefix = f"  [{i}/{total_p}] ({i/total_p:.1%}) [Original]"
+                prefix = f"  [{i}/{total_p}] ({i/total_p:.1%}) [Original] [{method}]"
                 cache_dir_method = cache_dir / method
                 tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
                 if tiny_path.exists():
@@ -1068,7 +1068,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
         for i, uid in enumerate(common_ids, 1):
             try:
                 file_path = cover_files[uid]
-                prefix = f"  [{i}/{total_p}] ({i/total_p:.1%}) [Cover]"
+                prefix = f"  [{i}/{total_p}] ({i/total_p:.1%}) [Cover] [{method}]"
                 cache_dir_method = cache_dir / method
                 tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
                 if tiny_path.exists():
@@ -1282,8 +1282,8 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
         best_thresh_ph, best_metrics_ph, curves_ph = evaluate_binary_classification(pairwise_pitch_hist, "Pitch Histogram")
         best_thresh_dtw, best_metrics_dtw, curves_dtw = evaluate_binary_classification(pairwise_dtw, "DTW", lower_is_better=True)
         
-        # Export comparativas_todas.csv
-        comp_csv_path = out_method_dir / "comparativas_todas.csv"
+        # Export all_comparisons.csv
+        comp_csv_path = out_method_dir / "all_comparisons.csv"
         with open(comp_csv_path, 'w') as f:
             f.write("cover_id,original_id,lcs_similarity,levenshtein_similarity,pitch_hist_similarity,dtw_distance,is_correct\n")
             for comp in all_comparisons:
@@ -1292,14 +1292,14 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
         # Export threshold curves
         for m_name, curves in [("lcs", curves_lcs), ("levenshtein", curves_lev), ("pitch_hist", curves_ph), ("dtw", curves_dtw)]:
             if not curves: continue
-            curve_csv_path = out_method_dir / f"analisis_umbrales_{m_name}.csv"
+            curve_csv_path = out_method_dir / f"threshold_analysis_{m_name}.csv"
             with open(curve_csv_path, 'w') as f:
                 f.write("threshold,tp,fp,fn,tn,precision,recall,f1_score,accuracy\n")
                 for c in curves:
                     f.write(f"{c['threshold']:.4f},{c['tp']},{c['fp']},{c['fn']},{c['tn']},{c['precision']:.6f},{c['recall']:.6f},{c['f1_score']:.6f},{c['accuracy']:.6f}\n")
         
         # Export to Detailed TXT Report
-        report_path = out_method_dir / "reporte_detallado.txt"
+        report_path = out_method_dir / "detailed_report.txt"
         with open(report_path, 'w') as f:
             f.write(f"DETAILED REPORT - METHOD: {method}\n")
             f.write("="*50 + "\n")
@@ -1330,7 +1330,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
                 ("Pitch Class Histogram (Chroma Cosine)", best_thresh_ph, best_metrics_ph),
                 ("DTW Distance (Optimal Path)", best_thresh_dtw, best_metrics_dtw)
             ]:
-                f.write(f"--- Metrica: {m_name} ---\n")
+                f.write(f"--- Metric: {m_name} ---\n")
                 if best_m:
                     f.write(f"  Optimal Threshold:  {best_t:.4f}\n")
                     f.write(f"  F1-Score:       {best_m['f1_score']:.4f}\n")
@@ -1461,7 +1461,7 @@ def run_single_dataset_benchmark(dataset_dir: Path, methods: list, args, base_di
     save_dataset_comparative_table(dataset_dir, output_dir)
 
 
-def run_benchmark_execution(args, base_dir):
+def run_mc_msa_execution(args, base_dir):
     # Resolver rutas base compartidas
     cache_dir = Path(args.cache_dir)
     if not cache_dir.is_absolute():
@@ -1469,12 +1469,13 @@ def run_benchmark_execution(args, base_dir):
 
     if args.method == 'all':
         methods = [
-            'pyin', 'yin', 'crepe', 'ensemble',
-            'poliner', 'durrieu', 'tachibana', 'melodia', 'basic_pitch',
-            'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe'
+            'pyin', 'yin', 'crepe', 'ensemble', 'rmvpe', 'spice', 'fcn_f0',
+            'melodia', 'tachibana', 'poliner', 'durrieu', 'basic_pitch',
+            'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
+            'bs_roformer', 'demucs'
         ]
     elif args.method == 'all_f0':
-        methods = ['pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0']
+        methods = ['pyin', 'yin', 'crepe', 'ensemble', 'rmvpe', 'spice', 'jdc', 'fcn_f0']
     elif args.method == 'all_melody':
         methods = [
             'poliner', 'durrieu', 'tachibana', 'melodia', 'basic_pitch',
@@ -1524,7 +1525,7 @@ def run_benchmark_execution(args, base_dir):
     # Procesar datasets seleccionados
     for dataset_dir in datasets_to_process:
         try:
-            run_single_dataset_benchmark(dataset_dir, methods, args, base_dir, cache_dir)
+            run_single_dataset_mc_msa(dataset_dir, methods, args, base_dir, cache_dir)
         except Exception as e:
             print(f"\nError processing dataset '{dataset_dir.name}': {e}")
 

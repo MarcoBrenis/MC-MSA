@@ -1,33 +1,33 @@
-# MC-MSA v2.5: Melody Extraction & Benchmarking Guide
+# MC-MSA v2.5: Melody Extraction & Evaluation Guide
 
-This user guide provides details on using the benchmarking suite of the **MC-MSA v2.5** framework. The benchmark evaluates melody extraction methods (F0 estimation, vocal separation hybrids, and symbolic estimators) on Cover Song Identification (CSI) tasks using Information Retrieval (IR) metrics.
+This user guide provides details on using the evaluation suite of the **MC-MSA v2.5** framework. The framework evaluates melody extraction methods (F0 estimation, vocal separation hybrids, and symbolic estimators) on Cover Song Identification (CSI) tasks using Information Retrieval (IR) metrics.
 
 ---
 
 ## 1. Directory & Dataset Structure
 
-The benchmark dynamically detects dataset folders in the workspace that prefix with `dataset_` (e.g., `dataset_OA`, `dataset_Acad`, `dataset_JJCC`).
+The pipeline dynamically detects dataset folders in the workspace that prefix with `dataset_` (e.g., `dataset_OA`, `dataset_Acad`, `dataset_JJCC`).
 
 Each dataset folder must contain two subdirectories:
 * **`originales/`**: The reference/original audio tracks.
 * **`covers/`**: The target cover versions.
 
 ### Matching Modes
-When running the benchmark, you can select how tracks are paired between `originales/` and `covers/`:
+When running the evaluation, you can select how tracks are paired between `originales/` and `covers/`:
 1. **`id` (Numeric ID Prefix - Default)**: Pairs tracks starting with the same number (e.g., `04 - Song A.mp3` matches `04 - Cover.wav`).
 2. **`stem` (Exact Name)**: Matches normalized file names.
 3. **`fuzzy` (Smart/Fuzzy Match)**: Utilizes word-overlap calculations for complex naming schemes or classical metadata.
 
 ---
 
-## 2. Core Benchmarking Scripts
+## 2. Core Evaluation Scripts
 
-### A. Full Melody Extraction Benchmark (`run_melody_benchmark.py`)
+### A. Full Melody Extraction Evaluation (`run_mc_msa.py`)
 This is the main runner. It iterates through the dataset, extracts melodic contours using the selected method(s), performs segmentation/classification, and calculates retrieval metrics.
 
 * **Usage**:
   ```bash
-  python run_melody_benchmark.py
+  python run_mc_msa.py
   ```
 * **Arguments**:
   * `--method`: Extraction method to evaluate (e.g., `pyin`, `crepe`, `demucs_crepe`, `bs_roformer_rmvpe`, `all`, etc.).
@@ -39,16 +39,16 @@ This is the main runner. It iterates through the dataset, extracts melodic conto
 
 ---
 
-### B. Hyperparameter Optimization (`run_melody_benchmark_optuna.py`)
+### B. Hyperparameter Optimization (`run_mc_msa_optuna.py`)
 Optimizes the parameters of `MelodyClassifierPaper` (voicing threshold, slope epsilon, energy tau) using **Optuna** to maximize the Mean Reciprocal Rank (MRR) or Longest Common Subsequence (LCS) similarity.
 
 * **Usage**:
   ```bash
-  python run_melody_benchmark_optuna.py --dataset_dir dataset_OA --method pyin
+  python run_mc_msa_optuna.py --dataset_dir dataset_OA --method pyin
   ```
 * **Notes**:
   * Leverages cached features to run thousands of parameter trials in-memory in seconds.
-  * Outputs the optimized parameters to `resultados_benchmark_optuna/benchmark_summary.csv`.
+  * Outputs the optimized parameters to `resultados_mc_msa_optuna/mc_msa_summary.csv`.
 
 ---
 
@@ -66,15 +66,15 @@ Recalculates all IR metrics and regenerates report tables **instantaneously** fr
 
 ---
 
-### D. Tiny Benchmark Runner (`run_tiny_benchmark.py`)
+### D. Tiny Evaluation Runner (`run_tiny_mc_msa.py`)
 A lightweight script designed for testing or debugging. It executes the analysis pipeline on a subset of two song pairs (IDs 02 and 04) and generates full comparative and qualitative figures.
 
 * **Usage**:
   ```bash
-  python run_tiny_benchmark.py --method pyin
+  python run_tiny_mc_msa.py --method pyin
   ```
 * **Outputs**:
-  * `salidas_tiny_benchmark/<method>/reporte_detallado.txt`: English performance summary.
+  * `salidas_tiny_mc_msa/<method>/detailed_report.txt`: English performance summary.
   * `fig_qualitative_bands.pdf` & `fig_qualitative_contour.pdf`: Segment comparisons.
   * Spectrograms, novelty curves, and self-similarity matrices (SSM) for the best match.
 
@@ -144,7 +144,7 @@ To support large datasets (70+ pairs) on consumer hardware without Out-Of-Memory
 
 ## 4. Evaluation Metrics
 
-The benchmarks calculate the following Information Retrieval metrics:
+The evaluations calculate the following Information Retrieval metrics:
 * **LCS (%)**: Longest Common Subsequence normalized similarity.
 * **MR**: Mean Rank of the correct match (lower is better).
 * **MDR**: Median Rank of the correct match (lower is better).
@@ -194,7 +194,7 @@ You can choose the installation configuration that fits your usage:
   ```bash
   pip install -e .[advanced]
   ```
-* **Full installation** (Recommended for the complete benchmark suite, including hyperparameter tuning):
+* **Full installation** (Recommended for the complete evaluation suite, including hyperparameter tuning):
   ```bash
   pip install -e .[advanced,optuna]
   ```

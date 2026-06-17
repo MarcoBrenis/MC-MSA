@@ -185,26 +185,19 @@ def sliding_norm(audio, frame_sizes = 993):
     :return: normalized audio
     '''
 
-    from numpy.lib.stride_tricks import as_strided
+    from scipy.ndimage import uniform_filter1d
 
     if(not frame_sizes%2==0):
         frame_sizes += 1
-    n_frames = len(audio)
-    audio = np.pad(audio, frame_sizes//2, mode = 'wrap')
 
-    hop_length = 1
-    frames = as_strided(audio, shape=(frame_sizes, n_frames), strides=(audio.itemsize, hop_length * audio.itemsize))
-    frames = frames.transpose()
+    # Calculate sliding mean and standard deviation using fast uniform_filter1d
+    mean = uniform_filter1d(audio, size=frame_sizes, mode='wrap')
+    mean_sq = uniform_filter1d(audio**2, size=frame_sizes, mode='wrap')
+    var = mean_sq - mean**2
+    std = np.sqrt(np.maximum(var, 0))
 
-    # normalize each frame -- this is expected by the model
-    mean = np.mean(frames, axis=1)[:, np.newaxis]
-    std = np.std(frames, axis=1)[:, np.newaxis]
-
-    audio = audio[frame_sizes//2:-frame_sizes//2]
-    mean = mean.flatten()
-    std = std.flatten()
     std[np.where(std==0.)[0]] = np.finfo(np.float32).eps # replace 0 by eps to avoid division by zero
-    audio -= mean
+    audio = audio - mean
     audio /= std
 
     return np.array(audio)
