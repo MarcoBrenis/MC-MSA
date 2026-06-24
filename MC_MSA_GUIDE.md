@@ -23,14 +23,14 @@ When running the evaluation, you can select how tracks are paired between `origi
 The **MC-MSA v2.5** framework provides two primary configurations to support both academic thesis evaluation and experimental research:
 
 * **Thesis Configuration (Academic Default)**:
-  * **Segmenter (`MelodySegmenter`)**: Employs the hybrid novelty calculation combining global SSM structure and local pitch/energy derivatives.
+  * **Segmenter (`MelodySegmenter`)**: Uses **pure SSM-based novelty detection**, removing local derivative boundary refinements to simplify model explanations and match the thesis manuscript.
   * **Classifier (`MelodyClassifierThesis`)**: Implements the strict 3-class academic rules (`A` for Antecedent, `C` for Consequent, and `X` for Transition).
   * *Purpose*: This is the standard configuration used to replicate official thesis findings.
 
 * **Beta Configuration (Experimental)**:
-  * **Segmenter (`MelodySegmenterBeta`)**: Uses **pure SSM-based novelty detection**, removing local derivative boundary refinements to simplify model explanations.
+  * **Segmenter (`MelodySegmenterBeta`)**: Employs the hybrid novelty calculation combining global SSM structure and local pitch/energy derivatives.
   * **Classifier (`MelodyClassifierThesisBeta`)**: Implements an experimental, corrected/refined set of decision rules for the 3-class system.
-  * *Purpose*: Used for evaluating clean SSM-based boundaries and revised decision trees.
+  * *Purpose*: Used for evaluating hybrid boundaries and revised decision trees.
 
 ---
 

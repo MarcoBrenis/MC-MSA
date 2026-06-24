@@ -11,10 +11,10 @@ from .features import MelodyFeatures
 from .segmenter import MelodySegment
 
 class MelodySegmenterBeta:
-    """Detects structural boundaries within a melody contour using a pure SSM-based approach.
+    """Detects structural boundaries within a melody contour using a hybrid approach.
     
-    This beta version relies strictly on the checkerboard-convolved self-similarity matrix 
-    global novelty curve, removing the local derivative-based novelty curves (pitch & energy).
+    This beta version combines a checkerboard-convolved self-similarity matrix 
+    (global structure) with local derivative-based novelty curves (pitch & energy).
     """
 
     def __init__(
@@ -102,9 +102,9 @@ class MelodySegmenterBeta:
         sim = self.compute_self_similarity(features)
         ssm_novelty = self.compute_checkerboard_novelty(sim)
 
-        # In this beta version, boundary detection relies solely on the global SSM novelty
-        # removing the local derivative-based novelty curves.
-        combined = ssm_novelty
+        # In this beta version, boundary detection uses the hybrid novelty curve
+        # combining the SSM global novelty (60%) and the local derivative-based novelty (40%).
+        combined = (1.0 - self.ssm_weight) * base_novelty + self.ssm_weight * ssm_novelty
         if np.max(combined) > 0:
             combined = combined / np.max(combined)
 

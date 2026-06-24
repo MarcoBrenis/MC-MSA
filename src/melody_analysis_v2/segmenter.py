@@ -31,10 +31,9 @@ class MelodySegmenter:
     """Detects structural boundaries within a melody contour.
 
     The segmentation strategy is inspired by novelty detection techniques employed
-    in MSAF but adjusted to work with melodic descriptors.  The algorithm combines
-    a checkerboard-convolved self-similarity matrix (pitch + energy) with a
-    derivative-based novelty curve, smooths the result, and selects salient peaks
-    as boundaries.
+    in MSAF but adjusted to work with melodic descriptors. The algorithm computes
+    a checkerboard-convolved self-similarity matrix (pitch + energy) and selects
+    salient peaks of the resulting novelty curve as boundaries.
     """
 
     def __init__(
@@ -149,9 +148,9 @@ class MelodySegmenter:
         sim = self.compute_self_similarity(features)
         ssm_novelty = self.compute_checkerboard_novelty(sim)
 
-        # In the original thesis version, boundary detection uses the hybrid novelty curve
-        # combining the SSM global novelty (60%) and the local derivative-based novelty (40%).
-        combined = (1.0 - self.ssm_weight) * base_novelty + self.ssm_weight * ssm_novelty
+        # In the thesis version, boundary detection relies solely on the global SSM novelty
+        # to simplify explanations and match the thesis manuscript.
+        combined = ssm_novelty
         if np.max(combined) > 0:
             combined = combined / np.max(combined)
 
