@@ -75,7 +75,6 @@ generate_thesis_figures.py
 generate_thesis_plots.py
 extraer_nya.py
 visualizar_*.py
-!visualizar_comparativa_thesis.py
 examples/visualizar_melodia_v2.py
 BRENIS_dataset/
 test.py
