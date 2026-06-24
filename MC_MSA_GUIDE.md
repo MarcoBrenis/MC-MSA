@@ -53,7 +53,18 @@ This is the main runner. It iterates through the dataset, extracts melodic conto
 
 ---
 
-### B. Hyperparameter Optimization (`run_mc_msa_optuna.py`)
+### B. Experimental Evaluation Runner (`run_mc_msa_beta.py`)
+Runs the experimental evaluation pipeline using the Beta configuration (with `MelodySegmenterBeta` and `MelodyClassifierThesisBeta`).
+
+* **Usage**:
+  ```bash
+  python run_mc_msa_beta.py
+  ```
+* **Arguments**: Same arguments as `run_mc_msa.py` (e.g., `--method`, `--dataset_dir`, `--match_mode`, `--cache_dir`, `--clear_cache`, `--dtw_all_pairs`).
+
+---
+
+### C. Hyperparameter Optimization (`run_mc_msa_optuna.py`)
 Optimizes the parameters of `MelodyClassifierThesis` (voicing threshold, slope epsilon, energy tau) using **Optuna** to maximize the Mean Reciprocal Rank (MRR) or Longest Common Subsequence (LCS) similarity.
 
 * **Usage**:
@@ -66,7 +77,7 @@ Optimizes the parameters of `MelodyClassifierThesis` (voicing threshold, slope e
 
 ---
 
-### C. Fast Recalculation of Metrics (`run_metrics_only.py`)
+### D. Fast Recalculation of Metrics (`run_metrics_only.py`)
 Recalculates all IR metrics and regenerates report tables **instantaneously** from cached analysis files without reprocessing the audio signals. Use this after changing metric definitions or to review summary tables.
 
 * **Usage**:
@@ -80,7 +91,7 @@ Recalculates all IR metrics and regenerates report tables **instantaneously** fr
 
 ---
 
-### D. Tiny Evaluation Runner (`run_tiny_mc_msa.py`)
+### E. Tiny Evaluation Runner (`run_tiny_mc_msa.py`)
 A lightweight script designed for testing or debugging. It executes the analysis pipeline on a subset of two song pairs (IDs 02 and 04) and generates full comparative and qualitative figures.
 
 * **Usage**:
@@ -94,7 +105,7 @@ A lightweight script designed for testing or debugging. It executes the analysis
 
 ---
 
-### E. Single Track Analyzer (`analyze_single_track.py`)
+### F. Single Track Analyzer (`analyze_single_track.py`)
 Analyzes a single audio file, prints a table of detected formal segments, and exports full visualizations and a synthesized melody WAV file.
 
 * **Usage**:
@@ -114,7 +125,7 @@ Analyzes a single audio file, prints a table of detected formal segments, and ex
 
 ---
 
-### F. Real-Audio Thesis Figure Generator (`generate_thesis_figures.py`)
+### G. Real-Audio Thesis Figure Generator (`generate_thesis_figures.py`)
 > [!NOTE]
 > **Local Research Utility:** This script is preserved locally for thesis visualization research but is excluded from Git version control.
 >
@@ -131,7 +142,7 @@ Analyzes a single audio file, prints a table of detected formal segments, and ex
 
 ---
 
-### G. Conceptual Thesis Figure Generator (`generate_thesis_plots.py`)
+### H. Conceptual Thesis Figure Generator (`generate_thesis_plots.py`)
 > [!NOTE]
 > **Local Research Utility:** This script is preserved locally for thesis visualization research but is excluded from Git version control.
 >
