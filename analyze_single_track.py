@@ -92,9 +92,9 @@ def main():
     segmenter = None
     if args.segmenter == "beta":
         segmenter = MelodySegmenterBeta()
-        print("Using Beta Segmenter (Pure SSM novelty)")
+        print("Using Beta Segmenter (Hybrid SSM + local derivative novelty)")
     else:
-        print("Using Thesis Segmenter (Hybrid SSM + local derivative novelty)")
+        print("Using Thesis Segmenter (Pure SSM novelty)")
         
     # Initialize Melody Analyzer
     analyzer = MelodyAnalyzer(
