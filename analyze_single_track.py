@@ -16,14 +16,17 @@ import matplotlib.pyplot as plt
 from src.melody_analysis_v2 import (
     MelodyAnalyzer,
     MelodyClassifierPaper,
-    plot_melody_contour,
-    plot_melody_and_energy,
-    plot_spectrogram_with_segments,
     synthesize_melody
 )
 from src.melody_analysis_v2.visualization import (
+    plot_melody_and_energy,
+    plot_melspectrogram,
     plot_self_similarity,
-    plot_boundary_detection
+    plot_boundary_detection,
+    plot_segment_extraction,
+    plot_melody_contour,
+    plot_spectrogram_with_segments,
+    plot_descriptor_summary
 )
 
 def parse_args():
@@ -32,8 +35,8 @@ def parse_args():
     parser.add_argument("--method", type=str, default="pyin",
                         choices=["pyin", "yin", "crepe", "rmvpe", "spice", "jdc", "fcn_f0", "melodia", "demucs_crepe", "bs_roformer_rmvpe", "basic_pitch"],
                         help="Melody extraction method (default: pyin)")
-    parser.add_argument("--classifier", type=str, default="standard", choices=["standard", "paper"],
-                        help="Structural classifier type (default: standard)")
+    parser.add_argument("--classifier", type=str, default="thesis", choices=["standard", "thesis"],
+                        help="Structural classifier type (default: thesis)")
     parser.add_argument("--output_dir", type=str, default="salidas_single_track",
                         help="Directory to save the visualizations and synthesized melody")
     return parser.parse_args()
@@ -61,9 +64,9 @@ def main():
     
     # Configure Classifier
     classifier = None
-    if args.classifier == "paper":
+    if args.classifier == "thesis":
         classifier = MelodyClassifierPaper()
-        print("Using Paper Classifier (A / C / X boundaries)")
+        print("Using Thesis Classifier (A / C / X boundaries)")
     else:
         print("Using Standard Caplin Classifier (Antecedent, Consequent, etc.)")
         
@@ -90,39 +93,106 @@ def main():
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    # 1. Save Melodic Contour Plot
-    print("Generating visualizations...")
-    contour_fig = plot_melody_and_energy(result)
-    contour_path = out_dir / f"{audio_path.stem}_contour.png"
-    contour_fig.savefig(contour_path, dpi=150, bbox_inches="tight")
-    plt.close(contour_fig)
-    print(f"  - Melody & Energy Contour plot: {contour_path}")
+    print("\nGenerating step-by-step visualizations...")
     
-    # 2. Save Spectrogram with Segments
+    # Load audio for spectrograms
     try:
         y, sr = sf.read(str(audio_path))
         if y.ndim > 1:
             y = np.mean(y, axis=1)
-        spec_fig = plot_spectrogram_with_segments(y, sr, result)
-        spec_path = out_dir / f"{audio_path.stem}_spectrogram.png"
-        spec_fig.savefig(spec_path, dpi=150, bbox_inches="tight")
-        plt.close(spec_fig)
-        print(f"  - Spectrogram with segments plot: {spec_path}")
     except Exception as e:
-        print(f"  - Could not generate spectrogram plot: {e}")
-        
-    # 3. Save Self-Similarity Matrix (SSM)
+        print(f"  - Warning: Could not load audio for spectrogram plots: {e}")
+        y, sr = None, None
+
+    # Step 1: Raw Melodic Contour (F0 & Energy)
     try:
-        ssm_fig = plot_self_similarity(result)
-        ssm_path = out_dir / f"{audio_path.stem}_ssm.png"
-        ssm_fig.savefig(ssm_path, dpi=150, bbox_inches="tight")
-        plt.close(ssm_fig)
-        print(f"  - Self-similarity matrix plot: {ssm_path}")
+        fig = plot_melody_and_energy(result, title="Step 1: Melodic Contour & Energy (Raw)")
+        path = out_dir / f"{audio_path.stem}_step1_contour_raw.png"
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  [1/8] Saved: {path.name}")
     except Exception as e:
-        print(f"  - Could not generate SSM plot: {e}")
-        
-    # 4. Synthesize Extracted Melody
-    print("Synthesizing extracted melody...")
+        print(f"  [1/8] Failed: {e}")
+
+    # Step 2: Raw Mel-Spectrogram
+    if y is not None:
+        try:
+            fig = plot_melspectrogram(y, sr, title="Step 2: Mel-Spectrogram (Raw)")
+            path = out_dir / f"{audio_path.stem}_step2_spectrogram_raw.png"
+            fig.savefig(path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            print(f"  [2/8] Saved: {path.name}")
+        except Exception as e:
+            print(f"  [2/8] Failed: {e}")
+    else:
+        print("  [2/8] Skipped (Audio not loaded)")
+
+    # Step 3: Self-Similarity Matrix (SSM)
+    try:
+        fig = plot_self_similarity(result, title="Step 3: Self-Similarity Matrix (SSM)")
+        path = out_dir / f"{audio_path.stem}_step3_ssm.png"
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  [3/8] Saved: {path.name}")
+    except Exception as e:
+        print(f"  [3/8] Failed: {e}")
+
+    # Step 4: Novelty Curves & Boundary Detection
+    try:
+        fig = plot_boundary_detection(result, title="Step 4: Boundary Detection (Novelty Curves)")
+        path = out_dir / f"{audio_path.stem}_step4_novelty_boundaries.png"
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  [4/8] Saved: {path.name}")
+    except Exception as e:
+        print(f"  [4/8] Failed: {e}")
+
+    # Step 5: Segment Extraction Bands (Visualized as blocks)
+    try:
+        fig = plot_segment_extraction(result, title="Step 5: Segment Extraction & Classification Bands")
+        path = out_dir / f"{audio_path.stem}_step5_segmentation_bands.png"
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  [5/8] Saved: {path.name}")
+    except Exception as e:
+        print(f"  [5/8] Failed: {e}")
+
+    # Step 6: Segmented Melodic Contour
+    try:
+        fig = plot_melody_contour(result, title="Step 6: Segmented Melodic Contour & Energy")
+        path = out_dir / f"{audio_path.stem}_step6_contour_segmented.png"
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  [6/8] Saved: {path.name}")
+    except Exception as e:
+        print(f"  [6/8] Failed: {e}")
+
+    # Step 7: Mel-Spectrogram with Segments
+    if y is not None:
+        try:
+            fig = plot_spectrogram_with_segments(y, sr, result, title="Step 7: Mel-Spectrogram with Annotated Segments")
+            path = out_dir / f"{audio_path.stem}_step7_spectrogram_segmented.png"
+            fig.savefig(path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            print(f"  [7/8] Saved: {path.name}")
+        except Exception as e:
+            print(f"  [7/8] Failed: {e}")
+    else:
+        print("  [7/8] Skipped (Audio not loaded)")
+
+    # Step 8: Descriptor Summary (Bar plots per segment)
+    try:
+        metrics_to_show = ["pitch_slope", "pitch_range", "energy_mean", "energy_delta"]
+        fig = plot_descriptor_summary(result, metrics=metrics_to_show)
+        path = out_dir / f"{audio_path.stem}_step8_descriptor_summary.png"
+        fig.savefig(path, dpi=150, bbox_inches="tight")
+        plt.close(fig)
+        print(f"  [8/8] Saved: {path.name}")
+    except Exception as e:
+        print(f"  [8/8] Failed: {e}")
+
+    # Synthesize Extracted Melody
+    print("\nSynthesizing extracted melody...")
     try:
         synth_audio = synthesize_melody(
             result.features.times,

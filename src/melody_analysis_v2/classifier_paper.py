@@ -56,46 +56,48 @@ class MelodyClassifierPaper:
             
             # 1. Class 'X' (Noise/Silence)
             mean_voicing = float(np.mean(voicing)) if voicing.size > 0 else 0.0
+            mean_energy = float(np.mean(energy)) if energy.size > 0 else 0.0
             
-            if mean_voicing < self.min_voicing_thresh:
+            # Identify voiced frames (confidence > 0.1, valid MIDI pitch > 0)
+            voiced_mask = (voicing > 0.1) & (~np.isnan(pitch)) & (pitch > 0)
+            proportion_voiced = float(np.mean(voiced_mask)) if voicing.size > 0 else 0.0
+            
+            # Calculate tail characteristics first so we can use them in the silence check
+            tail_len = max(1, int(len(pitch) * 0.2))
+            tail_idx = slice(-tail_len, None)
+            
+            tail_pitch = pitch[tail_idx]
+            tail_times = times[tail_idx]
+            tail_energy = float(np.mean(energy[tail_idx])) if energy[tail_idx].size > 0 else 0.0
+            
+            voiced_tail_mask = ~np.isnan(tail_pitch) & (tail_pitch > 0)
+            if np.sum(voiced_tail_mask) >= 2:
+                slope = self._safe_polyfit(tail_times[voiced_tail_mask], tail_pitch[voiced_tail_mask], 1)
+            else:
+                slope = 0.0
+
+            # Simplified 3-rule Algorithm logic
+            theta_silence = 0.08
+            theta_slope = 0.0
+            theta_energy = 0.15
+            
+            if mean_energy < theta_silence:
                 label = "Silence"
                 confidence = 1.0 - mean_voicing
-                descriptor = {"mean_voicing": mean_voicing, "reason": "Low voicing"}
+                descriptor = {
+                    "mean_voicing": mean_voicing,
+                    "mean_energy": mean_energy,
+                    "proportion_voiced": proportion_voiced,
+                    "reason": f"Mean energy below threshold ({mean_energy:.3f} < {theta_silence:.2f})"
+                }
+            elif slope <= theta_slope and tail_energy < theta_energy:
+                label = "Consequent"
+                confidence = 0.8
+                descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
             else:
-                # Analyze the last 20% of the segment
-                tail_len = max(1, int(len(pitch) * 0.2))
-                tail_idx = slice(-tail_len, None)
-                
-                tail_pitch = pitch[tail_idx]
-                tail_times = times[tail_idx]
-                tail_energy = float(np.mean(energy[tail_idx])) if energy[tail_idx].size > 0 else 0.0
-                
-                # Filter voiced frames in the tail for slope computation
-                voiced_tail_mask = ~np.isnan(tail_pitch)
-                if np.sum(voiced_tail_mask) >= 2:
-                    slope = self._safe_polyfit(tail_times[voiced_tail_mask], tail_pitch[voiced_tail_mask], 1)
-                else:
-                    slope = 0.0
-                
-                # Logic for A vs C
-                # A: slope > epsilon OR energy_tail > tau (tension/openness)
-                # C: slope < -epsilon AND energy_tail < tau (resolution/closure)
-                
-                if slope > self.slope_epsilon or tail_energy > self.energy_tau:
-                    label = "Antecedent"
-                    descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
-                elif slope < -self.slope_epsilon and tail_energy < (self.energy_tau / 2.0):
-                    label = "Consequent"
-                    descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
-                else:
-                    # Fallback/Ambiguous cases
-                    if slope < 0:
-                        label = "Consequent"
-                    else:
-                        label = "Antecedent"
-                    descriptor = {"f0_slope": slope, "energy_tail": tail_energy, "fallback": True}
-                
-                confidence = 0.8 # Fixed confidence for logic-based labels
+                label = "Antecedent"
+                confidence = 0.8
+                descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
 
             annotations.append(
                 MelodySegmentAnnotation(
