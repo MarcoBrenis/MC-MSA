@@ -1,0 +1,10 @@
+<USER_REQUEST>
+puedes checar si lo que se dice en la propuesta es todo cierto?: \chapter{A Melody-Centered Music Structure Analysis Framework}
+\label{ch:mc_msa_framework}
+
+%\textcolor{red}{Todo lo que diga "The melody-centered..." cambiarlo por "A melody-centered...". También checar las partes donde aún dice "FSA" en lugar de "MSA" (por ejemplo, en el título).}
+
+\section{Overview of the Architecture}
+To overcome the limitations of global functional analysis, this chapter introduces the proposed Melody-Centered Music Structure Analysis (MC-MSA) framework. The core objective of this architecture is to translate raw, polyphonic audio signals into a discrete, analytically meaningful sequence of formal melodic functions.
+
+<truncated 28483 bytes>

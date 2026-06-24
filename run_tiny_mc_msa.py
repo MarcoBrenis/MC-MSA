@@ -24,27 +24,23 @@ from run_mc_msa_beta import (
 def load_or_analyze(analyzer, file_path, method, cache_dir):
     cache_path = cache_dir / method / f"{file_path.stem}.json"
     if cache_path.exists():
-        with open(cache_path, 'r') as f:
-            data = json.load(f)
-        features = MelodyFeatures(
-            times=np.array(data["times"]),
-            pitch_midi=np.array(data["pitch_midi"]),
-            confidence=np.array(data["confidence"]),
-            energy=np.array(data["energy"])
-        )
-        segments = [
-            MelodySegmentAnnotation(
-                segment=MelodySegment(s["start_time"], s["end_time"], 0, 0),
-                label=s["label"],
-                confidence=s["confidence"],
-                descriptor=s["descriptor"]
+        try:
+            with open(cache_path, 'r') as f:
+                data = json.load(f)
+            features = MelodyFeatures(
+                times=np.array(data["times"]),
+                pitch_midi=np.array(data["pitch_midi"]),
+                confidence=np.array(data["confidence"]),
+                energy=np.array(data["energy"])
             )
-            for s in data["segments"]
-        ]
-        for s in segments:
-            s.segment.start_index = int(np.searchsorted(features.times, s.segment.start_time))
-            s.segment.end_index = int(np.searchsorted(features.times, s.segment.end_time))
-        return MelodyAnalysisResult(features=features, segments=segments)
+            # Re-run segmentation and classification dynamically using the cached features
+            result = analyzer.analyze_features(features)
+            # Save updated classifications back to cache JSON
+            with open(cache_path, 'w') as f:
+                json.dump(result.to_dict(), f)
+            return result
+        except Exception:
+            pass
     
     result = analyzer.analyze_file(str(file_path))
     cache_path.parent.mkdir(parents=True, exist_ok=True)

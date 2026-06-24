@@ -17,7 +17,21 @@ from src.melody_analysis_v2.classifier import MelodySegmentAnnotation
 def load_or_analyze_in_sub(analyzer, file_path, method, cache_dir, label_prefix=""):
     cache_path = cache_dir / method / f"{file_path.stem}.json"
     if cache_path.exists():
-        return
+        try:
+            with open(cache_path, 'r') as f:
+                data = json.load(f)
+            features = MelodyFeatures(
+                times=np.array(data["times"]),
+                pitch_midi=np.array(data["pitch_midi"]),
+                confidence=np.array(data["confidence"]),
+                energy=np.array(data["energy"])
+            )
+            result = analyzer.analyze_features(features)
+            with open(cache_path, 'w') as f:
+                json.dump(result.to_dict(), f)
+            return
+        except Exception:
+            pass
     
     result = analyzer.analyze_file(str(file_path), label_prefix=label_prefix)
     cache_path.parent.mkdir(parents=True, exist_ok=True)

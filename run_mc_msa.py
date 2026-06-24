@@ -294,20 +294,14 @@ def load_or_analyze(analyzer, file_path, method, cache_dir):
                 confidence=np.array(data["confidence"]),
                 energy=np.array(data["energy"])
             )
-            segments = [
-                MelodySegmentAnnotation(
-                    segment=MelodySegment(s["start_time"], s["end_time"], 0, 0),
-                    label=normalize_label(s["label"]),
-                    confidence=s["confidence"],
-                    descriptor=s["descriptor"]
-                )
-                for s in data["segments"]
-            ]
-            for s in segments:
-                s.segment.start_index = int(np.searchsorted(features.times, s.segment.start_time))
-                s.segment.end_index = int(np.searchsorted(features.times, s.segment.end_time))
-                
-            return MelodyAnalysisResult(features=features, segments=segments)
+            # Re-run segmentation and classification dynamically using the cached features
+            result = analyzer.analyze_features(features)
+            for s in result.segments:
+                s.label = normalize_label(s.label)
+            # Save updated classifications back to cache JSON
+            with open(cache_path, 'w') as f:
+                json.dump(result.to_dict(), f)
+            return result
         except Exception:
             pass
     

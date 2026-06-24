@@ -1,40 +1,20 @@
-"""Segmentation logic for melody analysis."""
+"""Beta segmentation logic for melody analysis (hybrid SSM + derivative novelty)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List
-
+from typing import List, Optional
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import find_peaks
 
 from .features import MelodyFeatures
+from .segmenter import MelodySegment
 
-
-@dataclass
-class MelodySegment:
-    """Representation of a temporal segment within the melody."""
-
-    start_time: float
-    end_time: float
-    start_index: int
-    end_index: int
-
-    def duration(self) -> float:
-        """Duration of the segment in seconds."""
-
-        return float(self.end_time - self.start_time)
-
-
-class MelodySegmenter:
-    """Detects structural boundaries within a melody contour.
-
-    The segmentation strategy is inspired by novelty detection techniques employed
-    in MSAF but adjusted to work with melodic descriptors.  The algorithm combines
-    a checkerboard-convolved self-similarity matrix (pitch + energy) with a
-    derivative-based novelty curve, smooths the result, and selects salient peaks
-    as boundaries.
+class MelodySegmenterBeta:
+    """Detects structural boundaries within a melody contour using a hybrid approach.
+    
+    This beta version combines a checkerboard-convolved self-similarity matrix 
+    (global structure) with a local derivative-based novelty curve (local transitions).
     """
 
     def __init__(
@@ -48,20 +28,6 @@ class MelodySegmenter:
         ssm_weight: float = 0.6,
         max_ssm_frames: int = 3000,
     ) -> None:
-        """Create a segmenter.
-
-        Parameters
-        ----------
-        kernel_size:
-            Standard deviation of the Gaussian kernel applied to the novelty
-            curve.  Larger values produce smoother novelty profiles.
-        peak_threshold:
-            Minimum relative height (0-1) for peaks to be considered as
-            boundaries.
-        min_separation:
-            Minimum number of frames between boundaries.
-        """
-
         self.kernel_size = kernel_size
         self.peak_threshold = peak_threshold
         self.min_separation = min_separation
@@ -73,7 +39,6 @@ class MelodySegmenter:
 
     def compute_self_similarity(self, features: MelodyFeatures) -> np.ndarray:
         """Compute a cosine self-similarity matrix from pitch and energy."""
-
         stacked = np.vstack((features.pitch_midi, features.energy)).T
         stacked = (stacked - np.mean(stacked, axis=0, keepdims=True)) / (
             np.std(stacked, axis=0, keepdims=True) + 1e-6
@@ -88,7 +53,6 @@ class MelodySegmenter:
 
     def compute_checkerboard_novelty(self, sim: np.ndarray) -> np.ndarray:
         """Compute novelty along the diagonal of the self-similarity matrix."""
-
         r = self.checkerboard_radius
         n = sim.shape[0]
         if n == 0 or n < 2 * r:
@@ -115,18 +79,7 @@ class MelodySegmenter:
     def compute_novelty(
         self, features: MelodyFeatures, *, return_components: bool = False
     ):
-        """Compute the novelty curve used for segmentation.
-
-        Parameters
-        ----------
-        features:
-            Extracted melodic descriptors.
-        return_components:
-            When ``True`` returns the combined novelty along with the base
-            derivative novelty, the SSM-derived novelty (or ``None``), and the
-            self-similarity matrix used to compute it (or ``None``).
-        """
-
+        """Compute the hybrid novelty curve used for segmentation."""
         pitch = features.pitch_midi
         energy = features.energy
 
@@ -149,9 +102,8 @@ class MelodySegmenter:
         sim = self.compute_self_similarity(features)
         ssm_novelty = self.compute_checkerboard_novelty(sim)
 
-        # In the thesis version, boundary detection relies solely on the global SSM novelty
-        # to simplify explanations and match the thesis manuscript.
-        combined = ssm_novelty
+        # Hybrid combination: base novelty (local changes) + ssm novelty (global structure)
+        combined = (1.0 - self.ssm_weight) * base_novelty + self.ssm_weight * ssm_novelty
         if np.max(combined) > 0:
             combined = combined / np.max(combined)
 
@@ -161,7 +113,6 @@ class MelodySegmenter:
 
     def find_boundaries(self, novelty: np.ndarray) -> np.ndarray:
         """Locate peaks in the novelty curve."""
-
         if novelty.size == 0:
             return np.array([], dtype=int)
 
@@ -174,14 +125,12 @@ class MelodySegmenter:
         return peaks.astype(int)
 
     def segment(self, features: MelodyFeatures) -> List[MelodySegment]:
-        """Segment the melody based on extracted features with adaptive downsampling."""
-        
+        """Segment the melody using adaptive downsampling."""
         n_frames = len(features.times)
         self.last_step = 1
         
         if n_frames > self.max_ssm_frames:
             self.last_step = int(np.ceil(n_frames / self.max_ssm_frames))
-            # Downsample features for structural analysis (SSM/Novelty)
             ds_features = MelodyFeatures(
                 times=features.times[::self.last_step],
                 pitch_midi=features.pitch_midi[::self.last_step],
@@ -195,7 +144,6 @@ class MelodySegmenter:
             ds_features, return_components=True
         )
         
-        # Store metadata for visualization and classification
         self.last_novelty = novelty
         self.last_base_novelty = base_novelty
         self.last_ssm_novelty = ssm_novelty
@@ -203,7 +151,6 @@ class MelodySegmenter:
         
         boundaries = self.find_boundaries(novelty)
 
-        # Map downsampled boundaries back to original high-res indices
         frame_indices = [0] + (boundaries * self.last_step).tolist() + [len(features.times) - 1]
         segments: List[MelodySegment] = []
         for start, end in zip(frame_indices[:-1], frame_indices[1:]):
@@ -222,6 +169,3 @@ class MelodySegmenter:
             segments.append(segment)
 
         return segments
-
-
-__all__ = ["MelodySegment", "MelodySegmenter"]

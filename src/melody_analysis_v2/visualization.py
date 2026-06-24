@@ -189,8 +189,12 @@ def _draw_segment_overlays(ax: plt.Axes, segments: Iterable, ymax: float) -> Non
     import matplotlib.patches as mpatches
     
     legend_handles = {}
+    segments_list = list(segments)
     
-    for ann in segments:
+    total_duration = max(ann.segment.end_time for ann in segments_list) if segments_list else 1.0
+    min_duration = total_duration * 0.02
+    
+    for ann in segments_list:
         label = ann.label
         meta = _get_caplin_meta(label)
         
@@ -215,7 +219,7 @@ def _draw_segment_overlays(ax: plt.Axes, segments: Iterable, ymax: float) -> Non
         # Label on top (Abbreviated)
         duration = ann.segment.end_time - ann.segment.start_time
         # Only show text if segment is wide enough to avoid overlap
-        if duration > 1.0: 
+        if duration > min_duration: 
             ax.text(
                 (ann.segment.start_time + ann.segment.end_time) / 2,
                 ymax,
@@ -229,8 +233,12 @@ def _draw_segment_overlays(ax: plt.Axes, segments: Iterable, ymax: float) -> Non
             )
 
     if legend_handles:
-        # Sort handles by the desired order in CAPLIN_METADATA
-        planned_order = [v["abbr"] for v in CAPLIN_METADATA.values()]
+        # Sort handles by the desired order in CAPLIN_METADATA, avoiding duplicates
+        planned_order = []
+        for v in CAPLIN_METADATA.values():
+            abbr = v["abbr"]
+            if abbr not in planned_order:
+                planned_order.append(abbr)
         sorted_abbrs = [a for a in planned_order if a in legend_handles]
         # Add any unexpected abbreviations at the end
         for a in legend_handles:
@@ -280,7 +288,7 @@ def plot_melody_only(
         _draw_segment_overlays(ax, result.segments, ymax)
 
     if title is None:
-        ax.set_title("Melodic contour")
+        ax.set_title("f0 Contour")
     else:
         ax.set_title(title)
     ax.grid(True, alpha=0.2)
@@ -317,7 +325,7 @@ def plot_f0_only(
         _draw_segment_overlays(ax, result.segments, ymax)
 
     if title is None:
-        ax.set_title("Melodic contour (f0)")
+        ax.set_title("f0 Contour")
     else:
         ax.set_title(title)
     ax.grid(True, alpha=0.2)
@@ -361,7 +369,7 @@ def plot_f0_no_segments(
     ax3.tick_params(axis="y", labelcolor="tab:red")
 
     if title is None:
-        ax1.set_title("Melodic contour and normalized energy")
+        ax1.set_title("f0 Contour and normalized energy")
     else:
         ax1.set_title(title)
     fig.tight_layout()
@@ -409,7 +417,7 @@ def plot_melody_and_energy(
     dpi: int = 300,
     title: Optional[str] = None,
 ) -> Figure:
-    """Plot the melodic contour and normalized energy without segments."""
+    """Plot the f0 contour and normalized energy without segments."""
     times = result.features.times
     pitch = result.features.pitch_midi
     energy = result.features.energy
@@ -427,7 +435,7 @@ def plot_melody_and_energy(
     ax2.tick_params(axis="y", labelcolor="tab:green")
 
     if title is None:
-        ax1.set_title("Melodic contour and normalized energy")
+        ax1.set_title("f0 Contour and normalized energy")
     else:
         ax1.set_title(title)
     fig.tight_layout()
@@ -448,7 +456,6 @@ def plot_melody_contour(
 ) -> Figure:
     times = result.features.times
     pitch = result.features.pitch_midi
-    energy = result.features.energy
 
     # Adaptive downsampling for visualization performance
     step = _get_plot_step(len(times))
@@ -462,15 +469,45 @@ def plot_melody_contour(
     ymax = float(np.nanmax(pitch)) if pitch.size else 0.0
     _draw_segment_overlays(ax1, result.segments, ymax)
 
-    ax2 = ax1.twinx()
-    ax2.plot(times[::step], energy[::step], color="tab:green", alpha=0.4, linewidth=0.8)
-    ax2.set_ylabel("Normalized energy", color="tab:green")
-    ax2.tick_params(axis="y", labelcolor="tab:green")
-
     if title is None:
-        ax1.set_title("Melodic contour and detected segments")
+        ax1.set_title("f0 Contour and detected segments")
     else:
         ax1.set_title(title)
+    fig.tight_layout()
+
+    output_path = _ensure_output_path(output_path)
+    if output_path is not None:
+        fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
+
+    return fig
+
+
+def plot_energy_contour(
+    result: MelodyAnalysisResult,
+    *,
+    output_path: Optional[Path] = None,
+    dpi: int = 300,
+    title: Optional[str] = None,
+) -> Figure:
+    """Plot only the normalized energy with segment overlays."""
+    times = result.features.times
+    energy = result.features.energy
+
+    # Adaptive downsampling for visualization performance
+    step = _get_plot_step(len(times))
+    
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.plot(times[::step], energy[::step], color="tab:green", linewidth=1.2)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Normalized Energy", color="tab:green")
+    ax.tick_params(axis="y", labelcolor="tab:green")
+
+    _draw_segment_overlays(ax, result.segments, 1.0)
+
+    if title is None:
+        ax.set_title("Normalized Energy and detected segments")
+    else:
+        ax.set_title(title)
     fig.tight_layout()
 
     output_path = _ensure_output_path(output_path)
@@ -531,6 +568,9 @@ def plot_spectrogram_with_segments(
     ax.plot(result.features.times[::step], f0_mel[::step], color="white", linewidth=1.5, alpha=0.9, label="f0")
 
     ymax = S_db.shape[0]
+    total_duration = max(ann.segment.end_time for ann in result.segments) if result.segments else 1.0
+    min_duration = total_duration * 0.02
+    
     for ann in result.segments:
         label = ann.label
         display_label = _format_label(label)
@@ -543,16 +583,18 @@ def plot_spectrogram_with_segments(
             alpha=0.2,
             linewidth=0,
         )
-        ax.text(
-            (ann.segment.start_time + ann.segment.end_time) / 2,
-            ymax - 1,
-            display_label,
-            ha="center",
-            va="top",
-            color="black",
-            fontsize=7,
-            bbox={"facecolor": color, "alpha": 0.4, "pad": 1},
-        )
+        duration = ann.segment.end_time - ann.segment.start_time
+        if duration > min_duration:
+            ax.text(
+                (ann.segment.start_time + ann.segment.end_time) / 2,
+                ymax - 1,
+                display_label,
+                ha="center",
+                va="top",
+                color="black",
+                fontsize=7,
+                bbox={"facecolor": color, "alpha": 0.4, "pad": 1},
+            )
 
     if title is None:
         ax.set_title("Spectrogram with annotated segments and f0")
@@ -751,7 +793,10 @@ __all__ = [
     "plot_f0_no_segments",
     "plot_f0_only",
     "plot_melody_only",
+    "plot_energy_only",
+    "plot_melody_and_energy",
     "plot_melody_contour",
+    "plot_energy_contour",
     "plot_self_similarity",
     "plot_boundary_detection",
     "plot_segment_extraction",
