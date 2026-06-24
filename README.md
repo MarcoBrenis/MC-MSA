@@ -2,12 +2,12 @@
 
 An experimental tool to segment and classify the melodic structure of an audio recording.
 The workflow is inspired by MSAF but focuses on melody: it extracts the contour
-(pitch and energy), detects structural changes, and labels each phrase with simple
-musical roles such as "presentation", "continuation", "antecedent", or "consequent".
+(pitch and energy), detects structural changes, and labels each phrase with strict
+academic roles: **Antecedent** (`A`), **Consequent** (`C`), or **Silence/Transition** (`X`).
 
-The section detector combines two change cues: a derived novelty curve
-(pitch/energy jumps) and a self-similarity matrix with a checkerboard kernel
-to highlight repetitions and contrasts between fragments.
+The section detector combines two change cues in a hybrid approach: a derived novelty curve
+(local transitions based on pitch and energy derivatives) and a global novelty curve calculated from a 
+self-similarity matrix (SSM) using a checkerboard kernel.
 
 ## Installation
 
@@ -235,31 +235,27 @@ plot_descriptor_summary(result).savefig("descriptor_summary.png")
 
 ## Analysis Flowchart
 
-The `MelodyAnalyzer` pipeline (and its clone `melody_analysis_v2`) follows these
-steps from left to right:
+The `MelodyAnalyzer` pipeline follows these steps from left to right:
 
 ```mermaid
 flowchart LR
-    A["Input Audio<br/>WAV/MP3"] --> B["STFT Extraction<br/>+ Mel Spectrogram"]
-    B --> C["Contour Estimation<br/>f0 in MIDI and Hz"]
-    C --> D["Smoothing and Normalization<br/>pitch/energy"]
-    D --> E["Novelty Curve<br/>based on derivatives"]
-    D --> F["Self-Similarity Matrix<br/>with checkerboard kernel"]
-    E --> G["Fusion of change cues<br/>novelty + self-similarity"]
+    A["Input Audio<br/>WAV/MP3"] --> B["Vocal Separation &<br/>Pitch Extraction"]
+    B --> C["Contour Estimation<br/>f0 (MIDI/Hz) & Energy"]
+    C --> D["Smoothing and Normalization<br/>(pitch/energy)"]
+    D --> E["Local Novelty Curve<br/>(derived transitions)"]
+    D --> F["Global Novelty Curve<br/>(SSM checkerboard)"]
+    E --> G["Cue Fusion<br/>(local + global novelty)"]
     F --> G
-    G --> H["Boundary Detection<br/>of segments"]
-    H --> I["Descriptor Calculation<br/>per segment<br/>(slope, range,<br/>parametric tension)"]
-    I --> J["Heuristic Classifier<br/>(exposition, question,<br/>answer, etc.)"]
-    J --> K["Visualization<br/>contour + f0 + colors<br/>by label"]
-    J --> L["JSON Export<br/>with labels<br/>and descriptors"]
+    G --> H["Boundary Detection"]
+    H --> I["Tail Descriptor Extraction<br/>(slope, energy, voicing)"]
+    I --> J["Heuristic Thesis Classifier<br/>(Antecedent, Consequent, Silence)"]
+    J --> K["A/C/X Visualization"]
+    J --> L["JSON Export"]
 ```
 
-- **Self-Similarity**: compares windows of the contour to highlight repetitions or
-  contrasts; it is filtered with a checkerboard kernel to obtain an additional novelty curve.
-- **Cue Fusion**: the derived novelty curve (pitch/energy jumps) is combined with the curve
-  coming from self-similarity; the resulting peaks define the possible phrase boundaries.
-- **Classification**: each segment receives contour, range, energy, and tension descriptors;
-  a rule-based classifier assigns simple musical roles (exposition, question, answer, transition, etc.).
+- **Self-Similarity Matrix**: Computes the self-similarity matrix of the contour to highlight structural repetitions and contrasts; a checkerboard kernel generates the global novelty curve along the diagonal.
+- **Cue Fusion (Thesis)**: Combines the global SSM novelty curve with local derived novelty curves (based on pitch and energy transitions) to define robust segment boundaries.
+- **Classification (Thesis)**: Analyzes tail descriptors (F0 slope and normalized energy in the final 20% of each segment) and voicing probability to assign strict academic roles: **Antecedent**, **Consequent**, or **Silence** (labeled as `A`, `C`, and `X` respectively).
 
 ## Tests
 
