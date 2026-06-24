@@ -12,6 +12,13 @@ Each dataset folder must contain two subdirectories:
 * **`originales/`**: The reference/original audio tracks.
 * **`covers/`**: The target cover versions.
 
+### Dataset Metadata CSV Catalog
+The repository includes CSV catalog files mapping the audio files to their formal metadata (work titles, performers, composers, and release years):
+* **`dataset_academic.csv`**: Metadata catalog for the classical/academic dataset.
+* **`dataset_popular.csv`**: Metadata catalog for the popular music dataset.
+
+These files contain columns such as `track_id`, `type` (`original`/`cover`), `performance title`, `performance artist`, `work title`, `work artist` (composer), and `release year`.
+
 ### Matching Modes
 When running the evaluation, you can select how tracks are paired between `originales/` and `covers/`:
 1. **`id` (Numeric ID Prefix - Default)**: Pairs tracks starting with the same number (e.g., `04 - Song A.mp3` matches `04 - Cover.wav`).
@@ -125,36 +132,7 @@ Analyzes a single audio file, prints a table of detected formal segments, and ex
 
 ---
 
-### G. Real-Audio Thesis Figure Generator (`generate_thesis_figures.py`)
-> [!NOTE]
-> **Local Research Utility:** This script is preserved locally for thesis visualization research but is excluded from Git version control.
->
-> Generates academic-quality visualizations of the Self-Similarity Matrix (SSM) based on a real audio file, showing detected boundaries, homogeneous blocks, and melodic repetitions.
 
-* **Usage**:
-  ```bash
-  python generate_thesis_figures.py path/to/song.mp3 --method pyin
-  ```
-* **Outputs**:
-  * `ssm_boundaries.png`: The SSM showing boundaries along the diagonal.
-  * `ssm_homogeneous.png`: The SSM highlighting a cohesive diagonal block.
-  * `ssm_repetitions.png`: The SSM highlighting symmetric off-diagonal repetitions.
-
----
-
-### H. Conceptual Thesis Figure Generator (`generate_thesis_plots.py`)
-> [!NOTE]
-> **Local Research Utility:** This script is preserved locally for thesis visualization research but is excluded from Git version control.
->
-> Generates clean, noise-free conceptual diagrams of an SSM representing a classic structure ($A$-$B$-$A'$-$B'$). Ideal for explaining theoretical concepts in the text.
-
-* **Usage**:
-  ```bash
-  python generate_thesis_plots.py
-  ```
-* **Outputs**:
-  * `fig_homogeneity.png`: Two-panel visualization showing a full SSM and a zoomed-in homogeneous block on the diagonal (Homogeneity Principle).
-  * `fig_repetition.png`: Multi-panel visualization comparing the diagonal blocks ($A_1$ and $A_2$) and their off-diagonal intersection ($A_1 \times A_2$), demonstrating parallel similarity patterns (Repetition Principle).
 
 ---
 
