@@ -43,6 +43,20 @@ python -m melody_analysis_v2 path/to/audio.wav \
     --sections-plot sections_v2.png
 ```
 
+### Decoupled Segmenters & Classifiers (Thesis vs. Beta)
+
+The `melody_analysis_v2` pipeline decouples structural segmentation from classification to support both historical thesis replication and experimental extensions:
+
+* **Thesis (Default/Standard)**
+  * **Segmenter (`MelodySegmenter`)**: Employs the hybrid novelty curve calculation (SSM global structure fused with local pitch/energy derivatives).
+  * **Classifier (`MelodyClassifierThesis`)**: Implements the strict 3-class academic rules (`A` for Antecedent, `C` for Consequent, and `X` for Transition).
+  * *Usage*: Run evaluations using `run_mc_msa.py` or the CLI `--segmenter thesis --classifier thesis`.
+
+* **Beta (Experimental)**
+  * **Segmenter (`MelodySegmenterBeta`)**: Uses **pure SSM-based novelty detection** (entirely removes local derivative boundary refinements to simplify model explanations).
+  * **Classifier (`MelodyClassifierThesisBeta`)**: Implements a refined/corrected set of decision rules for the 3-class classification system.
+  * *Usage*: Run evaluations using `run_mc_msa_beta.py` or the CLI `--segmenter beta --classifier beta`.
+
 In code:
 
 ```python
