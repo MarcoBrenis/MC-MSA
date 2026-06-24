@@ -239,23 +239,29 @@ The `MelodyAnalyzer` pipeline follows these steps from left to right:
 
 ```mermaid
 flowchart LR
-    A["Input Audio<br/>WAV/MP3"] --> B["Vocal Separation &<br/>Pitch Extraction"]
-    B --> C["Contour Estimation<br/>f0 (MIDI/Hz) & Energy"]
-    C --> D["Smoothing and Normalization<br/>(pitch/energy)"]
-    D --> E["Local Novelty Curve<br/>(derived transitions)"]
-    D --> F["Global Novelty Curve<br/>(SSM checkerboard)"]
-    E --> G["Cue Fusion<br/>(local + global novelty)"]
+    A["Input Audio<br/>(WAV/MP3)"] --> B["Melody Extraction<br/>(Pitch f0 & Energy)"]
+    B --> C["Smoothing & Normalization"]
+    C --> D["Local Novelty Curve<br/>(Pitch/Energy derivatives)"]
+    C --> E["Self-Similarity Matrix (SSM)"]
+    E --> F["Global Novelty Curve<br/>(Checkerboard Kernel)"]
+    D --> G["Cue Fusion<br/>(Local + Global)"]
     F --> G
-    G --> H["Boundary Detection"]
-    H --> I["Tail Descriptor Extraction<br/>(slope, energy, voicing)"]
-    I --> J["Heuristic Thesis Classifier<br/>(Antecedent, Consequent, Silence)"]
-    J --> K["A/C/X Visualization"]
-    J --> L["JSON Export"]
+    G --> H["Boundary Detection<br/>(Peak Picking)"]
+    H --> I["Tail Descriptor Extraction<br/>(F0 Slope, Energy, Voicing)"]
+    I --> J["Heuristic Classifier<br/>(Antecedent / Consequent / Silence)"]
+    J --> K["JSON Export &<br/>Visualizations"]
 ```
 
-- **Self-Similarity Matrix**: Computes the self-similarity matrix of the contour to highlight structural repetitions and contrasts; a checkerboard kernel generates the global novelty curve along the diagonal.
-- **Cue Fusion (Thesis)**: Combines the global SSM novelty curve with local derived novelty curves (based on pitch and energy transitions) to define robust segment boundaries.
-- **Classification (Thesis)**: Analyzes tail descriptors (F0 slope and normalized energy in the final 20% of each segment) and voicing probability to assign strict academic roles: **Antecedent**, **Consequent**, or **Silence** (labeled as `A`, `C`, and `X` respectively).
+- **Melody Extraction**: Estimates the pitch trajectory ($f_0$ in MIDI and Hz) and normalized root-mean-square energy from the audio signal.
+- **Smoothing & Normalization**: Performs linear interpolation of unvoiced frames and applies Gaussian filtering to smooth the trajectories.
+- **Local Novelty Curve**: Computes a novelty curve based on local transitions by taking first-order derivatives of pitch and energy.
+- **Self-Similarity Matrix (SSM)**: Computes a cosine self-similarity matrix from the stacked normalized pitch and energy trajectories.
+- **Global Novelty Curve**: Filters the SSM along the main diagonal using a checkerboard kernel to extract global structural changes.
+- **Cue Fusion (Thesis)**: Fuses the local novelty curve and global SSM novelty curve as a weighted sum.
+- **Boundary Detection**: Identifies the peaks of the fused novelty curve to perform phrase-level segmentation.
+- **Tail Descriptor Extraction**: Calculates feature descriptors (linear pitch slope, mean energy, and voicing probability) from the final 20% (tail) of each segment.
+- **Heuristic Classifier (Thesis)**: Maps the segment descriptors to the strict academic roles: **Antecedent** (`A`), **Consequent** (`C`), or **Silence/Transition** (`X`).
+- **Export & Visualizations**: Saves the results to a JSON report and generates diagnostic plots showing the contours, SSM, and boundaries.
 
 ## Tests
 
