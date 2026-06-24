@@ -54,7 +54,23 @@ def main():
     parser.add_argument("--method", type=str, default=None, 
                         choices=available_methods,
                         help="Extraction method to use")
+    parser.add_argument("--plots", type=str, default=None, choices=["y", "n"],
+                        help="Generate qualitative plots (y/n)")
     args = parser.parse_args()
+
+    # Ask user if they want plots if not specified in CLI
+    if args.plots is None:
+        while True:
+            plots_choice = input("\nDo you want to generate qualitative plots and diagrams? (y/n): ").strip().lower()
+            if plots_choice in ['y', 'yes']:
+                args.plots = 'y'
+                break
+            elif plots_choice in ['n', 'no']:
+                args.plots = 'n'
+                break
+            else:
+                print("Error: Please enter 'y' or 'n'.")
+    args.plots = (args.plots == 'y')
 
     if args.method is None:
         print("\n=== Extraction Method Selection ===")
@@ -161,38 +177,41 @@ def main():
                     best_lcs = true_sim
                     best_uid = uid_cover
                     best_pair_res = (res_originals[uid_cover], res_cover)
-                    print(f"\n  [Best Match] ID {uid_cover} with LCS={best_lcs:.4f}. Generating complete plots...")
-                    out_dir = base_dir / "salidas_tiny_mc_msa" / method
-                    out_dir.mkdir(parents=True, exist_ok=True)
-                    plot_caplin_bands(best_pair_res[0], best_pair_res[1], out_dir / "fig_qualitative_bands.pdf")
-                    plot_caplin_contour(best_pair_res[0], best_pair_res[1], out_dir / "fig_qualitative_contour.pdf")
-                    
-                    # Advanced Plots
-                    try:
-                        # Re-analyze to ensure we have novelty/ssm (not in cache)
-                        print(f"  Re-analyzing best pair to obtain visualization matrices...", end='\r')
-                        res_orig_full = analyzer.analyze_file(str(orig_files[uid_cover]))
-                        res_cover_full = analyzer.analyze_file(str(cover_files[uid_cover]))
+                    if args.plots:
+                        print(f"\n  [Best Match] ID {uid_cover} with LCS={best_lcs:.4f}. Generating complete plots...")
+                        out_dir = base_dir / "salidas_tiny_mc_msa" / method
+                        out_dir.mkdir(parents=True, exist_ok=True)
+                        plot_caplin_bands(best_pair_res[0], best_pair_res[1], out_dir / "fig_qualitative_bands.pdf")
+                        plot_caplin_contour(best_pair_res[0], best_pair_res[1], out_dir / "fig_qualitative_contour.pdf")
                         
-                        plot_boundary_detection(res_orig_full, output_path=out_dir / "fig_novelty_orig.pdf")
-                        plot_boundary_detection(res_cover_full, output_path=out_dir / "fig_novelty_cover.pdf")
-                        
-                        if res_orig_full.self_similarity is not None:
-                            plot_self_similarity(res_orig_full, output_path=out_dir / "fig_ssm_orig.pdf")
-                        if res_cover_full.self_similarity is not None:
-                            plot_self_similarity(res_cover_full, output_path=out_dir / "fig_ssm_cover.pdf")
+                        # Advanced Plots
+                        try:
+                            # Re-analyze to ensure we have novelty/ssm (not in cache)
+                            print(f"  Re-analyzing best pair to obtain visualization matrices...", end='\r')
+                            res_orig_full = analyzer.analyze_file(str(orig_files[uid_cover]))
+                            res_cover_full = analyzer.analyze_file(str(cover_files[uid_cover]))
                             
-                        # Spectrograms
-                        for name, res_f, path_audio in [("orig", res_orig_full, orig_files[uid_cover]), 
-                                                     ("cover", res_cover_full, cover_files[uid_cover])]:
-                            audio = res_f.normalized_audio
-                            sr = res_f.sample_rate
-                            if audio is None or sr is None:
-                                audio, sr = librosa.load(path_audio, sr=22050)
-                            plot_spectrogram_with_segments(audio, sr, res_f, output_path=out_dir / f"fig_spectrogram_{name}.pdf")
-                        print(f"  Complete plots generated successfully.{" "*20}")
-                    except Exception as plot_err:
-                        print(f"\n  Warning generating advanced plots: {plot_err}")
+                            plot_boundary_detection(res_orig_full, output_path=out_dir / "fig_novelty_orig.pdf")
+                            plot_boundary_detection(res_cover_full, output_path=out_dir / "fig_novelty_cover.pdf")
+                            
+                            if res_orig_full.self_similarity is not None:
+                                plot_self_similarity(res_orig_full, output_path=out_dir / "fig_ssm_orig.pdf")
+                            if res_cover_full.self_similarity is not None:
+                                plot_self_similarity(res_cover_full, output_path=out_dir / "fig_ssm_cover.pdf")
+                                
+                            # Spectrograms
+                            for name, res_f, path_audio in [("orig", res_orig_full, orig_files[uid_cover]), 
+                                                         ("cover", res_cover_full, cover_files[uid_cover])]:
+                                audio = res_f.normalized_audio
+                                sr = res_f.sample_rate
+                                if audio is None or sr is None:
+                                    audio, sr = librosa.load(path_audio, sr=22050)
+                                plot_spectrogram_with_segments(audio, sr, res_f, output_path=out_dir / f"fig_spectrogram_{name}.pdf")
+                            print(f"  Complete plots generated successfully.{" "*20}")
+                        except Exception as plot_err:
+                            print(f"\n  Warning generating advanced plots: {plot_err}")
+                    else:
+                        print(f"\n  [Best Match] ID {uid_cover} with LCS={best_lcs:.4f}. Skipping qualitative plots as requested.")
                 
                 dtw_val = 0.0
                 pitch_o = res_originals[uid_cover].features.pitch_midi

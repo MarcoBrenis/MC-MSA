@@ -14,7 +14,6 @@ import matplotlib.pyplot as plt
 from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierThesis, MelodyFeatures, MelodySegmentAnnotation, DiagramExporter
 from src.melody_analysis_v2.classifier_thesis import calculate_lcs
 from src.melody_analysis_v2.segmenter import MelodySegment
-# pyrefly: ignore [missing-import]
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
 from src.melody_analysis_v2.visualization import (
     plot_boundary_detection, 
@@ -849,7 +848,23 @@ def main():
                         help="Compute DTW for all pairs (slow)")
     parser.add_argument("--clear_cache", action="store_true",
                         help="Delete existing cache for the selected method before starting")
+    parser.add_argument("--plots", type=str, default=None, choices=["y", "n"],
+                        help="Generate qualitative plots and diagrams (y/n)")
     args = parser.parse_args()
+
+    # Ask user if they want plots if not specified in CLI
+    if args.plots is None:
+        while True:
+            plots_choice = input("\nDo you want to generate qualitative plots and diagrams? (y/n): ").strip().lower()
+            if plots_choice in ['y', 'yes']:
+                args.plots = 'y'
+                break
+            elif plots_choice in ['n', 'no']:
+                args.plots = 'n'
+                break
+            else:
+                print("Error: Please enter 'y' or 'n'.")
+    args.plots = (args.plots == 'y')
 
     base_dir = Path(__file__).parent.absolute()
 
@@ -1342,7 +1357,7 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
             f.write("="*50 + "\n")
 
         # Qualitative Plots for the absolute best match of this method
-        if best_uid is not None:
+        if best_uid is not None and args.plots:
             print(f"\n[{method}] Generating final qualitative plots for Best Match (ID {best_uid}, LCS={best_lcs:.4f})...")
             try:
                 # Import visualization utilities

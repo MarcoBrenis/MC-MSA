@@ -543,7 +543,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
         analyzer = MelodyAnalyzer(extraction_method=method, classifier=best_clf)
 
         # Qualitative plots for the best match of this method
-        if best_uid is not None:
+        if best_uid is not None and args.plots:
             print(f"\n[{method}] Generating final qualitative plots using optimized classifier (Best Match ID {best_uid})...")
             try:
                 from src.melody_analysis_v2.visualization import (
@@ -782,7 +782,23 @@ def main():
     parser.add_argument("--optuna_metric", type=str, default="mrr",
                         choices=["mrr", "lcs"],
                         help="Metric to maximize with Optuna (mrr or lcs)")
+    parser.add_argument("--plots", type=str, default=None, choices=["y", "n"],
+                        help="Generate qualitative plots and diagrams (y/n)")
     args = parser.parse_args()
+
+    # Ask user if they want plots if not specified in CLI
+    if args.plots is None:
+        while True:
+            plots_choice = input("\nDo you want to generate qualitative plots and diagrams? (y/n): ").strip().lower()
+            if plots_choice in ['y', 'yes']:
+                args.plots = 'y'
+                break
+            elif plots_choice in ['n', 'no']:
+                args.plots = 'n'
+                break
+            else:
+                print("Error: Please enter 'y' or 'n'.")
+    args.plots = (args.plots == 'y')
 
     base_dir = Path(__file__).parent.absolute()
 
