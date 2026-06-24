@@ -11,8 +11,8 @@ import numpy as np
 import librosa
 import matplotlib.pyplot as plt
 
-from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierPaper, MelodyFeatures, MelodySegmentAnnotation, DiagramExporter
-from src.melody_analysis_v2.classifier_paper import calculate_lcs
+from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierThesis, MelodyFeatures, MelodySegmentAnnotation, DiagramExporter
+from src.melody_analysis_v2.classifier_thesis import calculate_lcs
 from src.melody_analysis_v2.segmenter import MelodySegment
 # pyrefly: ignore [missing-import]
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
@@ -1013,7 +1013,7 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
         classification = METHOD_CLASSIFICATION.get(m, "Unknown")
         print(f"  - {m}: {classification}")
 
-    classifier = MelodyClassifierPaper()
+    classifier = MelodyClassifierThesis()
     summary_path = output_dir / "mc_msa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     # Check if summary_path exists but has old format, delete it to avoid column mismatch

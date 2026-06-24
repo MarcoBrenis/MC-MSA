@@ -40,7 +40,7 @@ This is the main runner. It iterates through the dataset, extracts melodic conto
 ---
 
 ### B. Hyperparameter Optimization (`run_mc_msa_optuna.py`)
-Optimizes the parameters of `MelodyClassifierPaper` (voicing threshold, slope epsilon, energy tau) using **Optuna** to maximize the Mean Reciprocal Rank (MRR) or Longest Common Subsequence (LCS) similarity.
+Optimizes the parameters of `MelodyClassifierThesis` (voicing threshold, slope epsilon, energy tau) using **Optuna** to maximize the Mean Reciprocal Rank (MRR) or Longest Common Subsequence (LCS) similarity.
 
 * **Usage**:
   ```bash
@@ -85,12 +85,12 @@ Analyzes a single audio file, prints a table of detected formal segments, and ex
 
 * **Usage**:
   ```bash
-  python analyze_single_track.py path/to/song.mp3 --method pyin --classifier standard
+  python analyze_single_track.py path/to/song.mp3 --method pyin --classifier thesis
   ```
 * **Arguments**:
   * `audio_path`: Path to the audio file (optional, prompts if omitted).
   * `--method`: Pitch extraction method (e.g., `pyin`, `crepe`, `bs_roformer_rmvpe`, etc.).
-  * `--classifier`: Classifier rules (`standard` or `paper`).
+  * `--classifier`: Classifier rules (`standard`, `thesis`, or `beta`).
   * `--output_dir`: Output directory for exports (default: `salidas_single_track`).
 * **Outputs**:
   * `<song>_contour.png`: Melodic contour with segments and energy.

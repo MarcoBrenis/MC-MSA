@@ -1,4 +1,4 @@
-"""Strict 3-class classifier (A, C, X) for CLEI paper experiments."""
+"""Strict 3-class classifier (A, C, X) for the original thesis/paper experiments."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from .features import MelodyFeatures
 from .segmenter import MelodySegment
 from .classifier import MelodySegmentAnnotation
 
-class MelodyClassifierPaper:
+class MelodyClassifierThesis:
     """
     Implements a strict 3-class (A, C, X) classification logic based on Caplin's theory.
     Optimized for RMVPE data (f0, energy, and voicing probability).
@@ -124,6 +124,4 @@ def calculate_lcs(seq1: List[str], seq2: List[str]) -> float:
                 dp[i][j] = max(dp[i-1][j], dp[i][j-1])
     
     lcs_len = dp[n][m]
-    # Similarity score: 2 * LCS / (len1 + len2) or just normalized by max?
-    # Common implementation is 2 * LCS / (len1 + len2)
     return 2.0 * lcs_len / (n + m)

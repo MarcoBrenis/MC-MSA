@@ -7,8 +7,8 @@ import numpy as np
 import librosa
 import matplotlib.pyplot as plt
 
-from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierPaper, MelodyFeatures, MelodySegmentAnnotation
-from src.melody_analysis_v2.classifier_paper import calculate_lcs
+from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierThesis, MelodyFeatures, MelodySegmentAnnotation
+from src.melody_analysis_v2.classifier_thesis import calculate_lcs
 from src.melody_analysis_v2.segmenter import MelodySegment
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
 
@@ -98,7 +98,7 @@ def main():
     else:
         methods = [args.method]
 
-    classifier = MelodyClassifierPaper()
+    classifier = MelodyClassifierThesis()
     print(f"\nStarting TINY MC-MSA | Methods: {methods}")
     
     for method in methods:

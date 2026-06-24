@@ -1,4 +1,4 @@
-"""Beta segmentation logic for melody analysis (hybrid SSM + derivative novelty)."""
+"""Beta segmentation logic for melody analysis (pure SSM novelty without derivatives)."""
 
 from __future__ import annotations
 
@@ -11,10 +11,10 @@ from .features import MelodyFeatures
 from .segmenter import MelodySegment
 
 class MelodySegmenterBeta:
-    """Detects structural boundaries within a melody contour using a hybrid approach.
+    """Detects structural boundaries within a melody contour using a pure SSM-based approach.
     
-    This beta version combines a checkerboard-convolved self-similarity matrix 
-    (global structure) with a local derivative-based novelty curve (local transitions).
+    This beta version relies strictly on the checkerboard-convolved self-similarity matrix 
+    global novelty curve, removing the local derivative-based novelty curves (pitch & energy).
     """
 
     def __init__(
@@ -102,8 +102,9 @@ class MelodySegmenterBeta:
         sim = self.compute_self_similarity(features)
         ssm_novelty = self.compute_checkerboard_novelty(sim)
 
-        # Hybrid combination: base novelty (local changes) + ssm novelty (global structure)
-        combined = (1.0 - self.ssm_weight) * base_novelty + self.ssm_weight * ssm_novelty
+        # In this beta version, boundary detection relies solely on the global SSM novelty
+        # removing the local derivative-based novelty curves.
+        combined = ssm_novelty
         if np.max(combined) > 0:
             combined = combined / np.max(combined)
 

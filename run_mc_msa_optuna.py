@@ -13,8 +13,8 @@ import optuna
 # Setup path to import src modules
 sys.path.append(str(Path(__file__).parent.absolute()))
 
-from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierPaper, MelodyFeatures, MelodySegmentAnnotation, DiagramExporter
-from src.melody_analysis_v2.classifier_paper import calculate_lcs
+from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierThesis, MelodyFeatures, MelodySegmentAnnotation, DiagramExporter
+from src.melody_analysis_v2.classifier_thesis import calculate_lcs
 from src.melody_analysis_v2.segmenter import MelodySegment
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
 from src.melody_analysis_v2.visualization import (
@@ -77,7 +77,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
         print(f"  - {m}: {classification}")
 
     # Initialize with default classifier to load and populate cache
-    default_classifier = MelodyClassifierPaper()
+    default_classifier = MelodyClassifierThesis()
     
     summary_path = output_dir / "mc_msa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -187,7 +187,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
             slope_epsilon = trial.suggest_float('slope_epsilon', 0.0, 0.5)
             energy_tau = trial.suggest_float('energy_tau', 0.01, 0.9)
             
-            clf = MelodyClassifierPaper(
+            clf = MelodyClassifierThesis(
                 min_voicing_thresh=min_voicing_thresh,
                 slope_epsilon=slope_epsilon,
                 energy_tau=energy_tau
@@ -249,7 +249,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
         print("*"*60 + "\n")
         
         # Instantiate the optimized classifier
-        best_clf = MelodyClassifierPaper(
+        best_clf = MelodyClassifierThesis(
             min_voicing_thresh=best_params['min_voicing_thresh'],
             slope_epsilon=best_params['slope_epsilon'],
             energy_tau=best_params['energy_tau']

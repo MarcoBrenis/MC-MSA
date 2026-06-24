@@ -8,8 +8,8 @@ import numpy as np
 import librosa
 import matplotlib.pyplot as plt
 
-from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierPaper, MelodyFeatures, MelodySegmentAnnotation, DiagramExporter
-from src.melody_analysis_v2.classifier_paper import calculate_lcs
+from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierThesisBeta, MelodySegmenterBeta, MelodyFeatures, MelodySegmentAnnotation, DiagramExporter
+from src.melody_analysis_v2.classifier_thesis import calculate_lcs
 from src.melody_analysis_v2.segmenter import MelodySegment
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
 from src.melody_analysis_v2.visualization import (
@@ -726,7 +726,8 @@ def main():
         classification = METHOD_CLASSIFICATION.get(m, "Unknown")
         print(f"  - {m}: {classification}")
 
-    classifier = MelodyClassifierPaper()
+    segmenter = MelodySegmenterBeta()
+    classifier = MelodyClassifierThesisBeta()
     summary_path = output_dir / "mc_msa_summary.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     # Check if summary_path exists but has old format, delete it to avoid column mismatch
@@ -746,7 +747,12 @@ def main():
     for method in methods:
         classification = METHOD_CLASSIFICATION.get(method, "Unknown")
         print(f"\n[{method}] Processing... ({classification})")
-        analyzer = MelodyAnalyzer(extraction_method=method, classifier=classifier)
+        # Initialize Melody Analyzer for this method
+        analyzer = MelodyAnalyzer(
+            extraction_method=method,
+            classifier=classifier,
+            segmenter=segmenter
+        )
         
         out_method_dir = output_dir / method
         out_method_dir.mkdir(parents=True, exist_ok=True)

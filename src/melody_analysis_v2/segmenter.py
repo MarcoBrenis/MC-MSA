@@ -149,9 +149,9 @@ class MelodySegmenter:
         sim = self.compute_self_similarity(features)
         ssm_novelty = self.compute_checkerboard_novelty(sim)
 
-        # In the thesis version, boundary detection relies solely on the global SSM novelty
-        # to simplify explanations and match the thesis manuscript.
-        combined = ssm_novelty
+        # In the original thesis version, boundary detection uses the hybrid novelty curve
+        # combining the SSM global novelty (60%) and the local derivative-based novelty (40%).
+        combined = (1.0 - self.ssm_weight) * base_novelty + self.ssm_weight * ssm_novelty
         if np.max(combined) > 0:
             combined = combined / np.max(combined)
 

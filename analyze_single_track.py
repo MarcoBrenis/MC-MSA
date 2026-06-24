@@ -15,8 +15,8 @@ import matplotlib.pyplot as plt
 # Import the core MC-MSA pipeline tools
 from src.melody_analysis_v2 import (
     MelodyAnalyzer,
-    MelodyClassifierPaper,
-    MelodyClassifierPaperV2,
+    MelodyClassifierThesis,
+    MelodyClassifierThesisBeta,
     MelodySegmenterBeta,
     synthesize_melody
 )
@@ -40,7 +40,7 @@ def parse_args():
     parser.add_argument("--method", type=str, default="pyin",
                         choices=["pyin", "yin", "crepe", "rmvpe", "spice", "jdc", "fcn_f0", "melodia", "demucs_crepe", "bs_roformer_rmvpe", "basic_pitch"],
                         help="Melody extraction method (default: pyin)")
-    parser.add_argument("--classifier", type=str, default="thesis", choices=["standard", "thesis", "thesis_v2"],
+    parser.add_argument("--classifier", type=str, default="thesis", choices=["standard", "thesis", "beta"],
                         help="Structural classifier type (default: thesis)")
     parser.add_argument("--segmenter", type=str, default="thesis", choices=["thesis", "beta"],
                         help="Structural segmenter type (default: thesis)")
@@ -80,11 +80,11 @@ def main():
     # Configure Classifier
     classifier = None
     if args.classifier == "thesis":
-        classifier = MelodyClassifierPaper()
+        classifier = MelodyClassifierThesis()
         print("Using Thesis Classifier (A / C / X boundaries)")
-    elif args.classifier == "thesis_v2":
-        classifier = MelodyClassifierPaperV2()
-        print("Using Thesis Classifier v2.0 (Corrected A / C / X boundaries)")
+    elif args.classifier == "beta":
+        classifier = MelodyClassifierThesisBeta()
+        print("Using Thesis Classifier Beta (Corrected A / C / X boundaries)")
     else:
         print("Using Standard Caplin Classifier (Antecedent, Consequent, etc.)")
         
@@ -92,9 +92,9 @@ def main():
     segmenter = None
     if args.segmenter == "beta":
         segmenter = MelodySegmenterBeta()
-        print("Using Beta Segmenter (Hybrid SSM + local derivative novelty)")
+        print("Using Beta Segmenter (Pure SSM novelty)")
     else:
-        print("Using Thesis Segmenter (Pure SSM novelty)")
+        print("Using Thesis Segmenter (Hybrid SSM + local derivative novelty)")
         
     # Initialize Melody Analyzer
     analyzer = MelodyAnalyzer(

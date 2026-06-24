@@ -1,4 +1,4 @@
-"""Strict 3-class classifier v2.0 (A, C, X) implementing corrected thesis rules."""
+"""Strict 3-class classifier beta (A, C, X) implementing corrected thesis rules."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ from .features import MelodyFeatures
 from .segmenter import MelodySegment
 from .classifier import MelodySegmentAnnotation
 
-class MelodyClassifierPaperV2:
+class MelodyClassifierThesisBeta:
     """
     Implements the corrected strict 3-class (A, C, X) classification logic for MC-MSA.
-    This version 2.0 aligns exactly with the thesis manuscript and fixes logical inconsistencies.
+    This beta version aligns exactly with the updated thesis manuscript decision tree.
     """
 
     def __init__(

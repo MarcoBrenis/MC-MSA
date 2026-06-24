@@ -8,7 +8,7 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
 
-from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierPaper
+from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierThesis
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
 from src.melody_analysis_v2.features import MelodyFeatures
 from src.melody_analysis_v2.segmenter import MelodySegment
@@ -46,7 +46,7 @@ def main():
     parser.add_argument("--label_prefix", default="", type=str)
     args = parser.parse_args()
     
-    classifier = MelodyClassifierPaper()
+    classifier = MelodyClassifierThesis()
     analyzer = MelodyAnalyzer(extraction_method=args.method, classifier=classifier)
     
     file_path = Path(args.file_path)
