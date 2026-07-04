@@ -44,11 +44,11 @@ cache_tiny/
 *.flac
 
 # Benchmark Results / Outputs
-salidas_*/
-test_vis*/
-resultados_*/
-resultados_benchmark/
-resultados_benchmark_optuna/
+# salidas_*/
+# test_vis*/
+# resultados_*/
+# resultados_benchmark/
+# resultados_benchmark_optuna/
 # tabla_academica.tex
 # tabla_popular.tex
 # pdf_text.txt

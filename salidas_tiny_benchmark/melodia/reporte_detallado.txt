@@ -1,0 +1,18 @@
+DETAILED REPORT - TINY BENCHMARK - METHOD: melodia
+==================================================
+IMAGES GENERATED FOR THE BEST MATCH (LCS = 0.6623):
+  ID: 4
+  Original: 04 - Banda MS de Sergio Lizárraga - Mi Razón de Ser.mp3
+  Cover:    04 - Mane de la Parra - Mi Razón de Ser (Acústico Desde Casa).mp3
+==================================================
+ID 02 | LCS: 0.6364 | Rank:  1 | DTW: 51.0265
+ID 04 | LCS: 0.6623 | Rank:  2 | DTW: 26.8746
+==================================================
+SUMMARY:
+Average LCS: 0.6493
+Mean Rank:   1.5000
+MRR:         0.7500
+Median Rank: 1.5
+MAP:         0.7500
+Top-5 Prec.: 100.00%
+Average DTW: 38.9505

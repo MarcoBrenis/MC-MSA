@@ -1,0 +1,5 @@
+Comparison: Piano Sonata No. 11 in A Major, K. 331_ I. Tema. Andante grazioso.mp3 vs András Schiff - Piano Sonata No. 11 in A Major, K. 331 _ Mozart_ Piano Sonata No. 11 in A Major, K. 331_ I. Tema (Andante grazioso) con variazioni.mp3
+Method: pyin
+Original: A-C-A-C-A-C-C-C-A-C-A-C-A-C-A-C-C-C-A-C-A-C-A-A-A-C-A-C-C-A-C-A-A-A-A-A-A-C-C-A-C-A-C-A-A-C-C-A-C-C-A-A-A-A-C-A-A-A-A-A-A-A-A-A-C-C-A-A-A-A-A-C-C-A-A-A-A-C-A-C-C-A-C-A-A-C-A-A-A-C-A-A-C-A-A-C-A-C-A-C-A-C-A-A-C-A-A-C-A-A-C-C-C-A-A-A-C-A-C-A-C-A-A-C-C-A-A-C-A-A-A-A-A-C-A-C-A-C-A-A-A-A-A-A-A-A-A-A-A-A
+Cover:    A-C-C-C-C-A-A-A-C-C-A-A-C-C-A-A-C-A-C-C-C-A-A-C-A-C-A-C-A-C-A-A-C-A-A-C-A-C-A-A-C-A-C-A-C-A-A-A-C-C-A-A-A-A-C-C-C-C-C-A-C-A-A-C-C-A-C-A-C-A-C-A-A-C-A-C-C-A-C-A-A-C-C-A-A-C-C-C-A-A-A-C-A-C-A-C-C-A-C-C-C-A-A-C-C-A-A-C-C-C-A-A-C-A-A-C-C-A-C-A-A-C-A-C-A-A-A-C-A-C-A-C-A-A-C-A-C-A-A-A-C-A-A-C-C-A-A-C-A-C-A-C-C-A-C-C-A-C-A-C-A-C-C-A-A-C-A-C-A-C-A-C-A-C-A-C-A-C-A-C-C-A-C-A-A-A-A-A-A-A-A-A-C-C-A-A-A-C-A-A-C-A-C-A
+LCS Similarity: 0.7910

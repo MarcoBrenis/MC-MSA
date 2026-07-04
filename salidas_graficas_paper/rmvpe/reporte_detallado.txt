@@ -1,0 +1,90 @@
+REPORTE DETALLADO - METODO: rmvpe
+==================================================
+ID 01 | LCS: 0.7892 | Rank: 65 | DTW: 2.2117
+ID 02 | LCS: 0.7704 | Rank: 20 | DTW: 1.1527
+ID 03 | LCS: 0.8571 | Rank: 43 | DTW: 0.6965
+ID 04 | LCS: 0.8995 | Rank: 37 | DTW: 0.1345
+ID 05 | LCS: 0.9538 | Rank: 16 | DTW: 0.5122
+ID 06 | LCS: 0.5089 | Rank: 63 | DTW: 1.2849
+ID 07 | LCS: 0.8636 | Rank: 35 | DTW: 13.0198
+ID 08 | LCS: 0.9766 | Rank:  8 | DTW: 1.2103
+ID 09 | LCS: 0.8276 | Rank: 52 | DTW: 0.1301
+ID 10 | LCS: 0.8465 | Rank: 34 | DTW: 0.2612
+ID 11 | LCS: 0.8862 | Rank: 26 | DTW: 1.1455
+ID 12 | LCS: 0.9565 | Rank: 12 | DTW: 0.8780
+ID 13 | LCS: 0.8431 | Rank: 49 | DTW: 0.0672
+ID 14 | LCS: 0.9114 | Rank: 24 | DTW: 0.6987
+ID 15 | LCS: 0.9068 | Rank: 26 | DTW: 1.5232
+ID 16 | LCS: 0.7607 | Rank: 72 | DTW: 0.2094
+ID 17 | LCS: 0.9032 | Rank: 29 | DTW: 0.8247
+ID 18 | LCS: 0.9432 | Rank: 16 | DTW: 0.4276
+ID 19 | LCS: 0.9120 | Rank: 34 | DTW: 0.4141
+ID 20 | LCS: 0.8559 | Rank: 55 | DTW: 0.5336
+ID 21 | LCS: 0.8142 | Rank: 47 | DTW: 1.2249
+ID 22 | LCS: 0.8557 | Rank: 49 | DTW: 0.4694
+ID 23 | LCS: 0.8571 | Rank: 45 | DTW: 1.2151
+ID 24 | LCS: 0.9065 | Rank: 34 | DTW: 0.5991
+ID 25 | LCS: 0.7006 | Rank: 75 | DTW: 0.4139
+ID 26 | LCS: 0.8946 | Rank: 23 | DTW: 1.0837
+ID 27 | LCS: 0.9383 | Rank: 22 | DTW: 0.3503
+ID 28 | LCS: 0.8083 | Rank: 60 | DTW: 1.2085
+ID 29 | LCS: 0.8889 | Rank: 34 | DTW: 0.1611
+ID 30 | LCS: 0.8411 | Rank: 54 | DTW: 1.6517
+ID 31 | LCS: 0.9510 | Rank: 15 | DTW: 0.7454
+ID 32 | LCS: 0.9310 | Rank: 24 | DTW: 0.5698
+ID 33 | LCS: 0.7264 | Rank: 64 | DTW: 3.7620
+ID 34 | LCS: 0.9236 | Rank: 22 | DTW: 0.3592
+ID 35 | LCS: 0.8187 | Rank: 65 | DTW: 1.5329
+ID 36 | LCS: 0.9044 | Rank: 20 | DTW: 0.2147
+ID 37 | LCS: 0.4248 | Rank: 80 | DTW: 0.8004
+ID 38 | LCS: 0.7725 | Rank: 68 | DTW: 0.4904
+ID 39 | LCS: 0.9347 | Rank: 21 | DTW: 0.8543
+ID 40 | LCS: 0.5241 | Rank: 78 | DTW: 0.4614
+ID 41 | LCS: 0.9712 | Rank: 12 | DTW: 0.2213
+ID 42 | LCS: 0.9224 | Rank: 31 | DTW: 0.5020
+ID 43 | LCS: 0.8482 | Rank: 53 | DTW: 0.3826
+ID 44 | LCS: 0.9265 | Rank: 24 | DTW: 0.3650
+ID 45 | LCS: 0.9580 | Rank:  6 | DTW: 0.3563
+ID 46 | LCS: 0.7895 | Rank: 56 | DTW: 2.3312
+ID 47 | LCS: 0.9218 | Rank: 21 | DTW: 0.1074
+ID 48 | LCS: 0.9360 | Rank: 19 | DTW: 0.5827
+ID 49 | LCS: 0.9569 | Rank: 11 | DTW: 0.2663
+ID 50 | LCS: 0.9508 | Rank: 17 | DTW: 0.1538
+ID 51 | LCS: 0.7175 | Rank: 73 | DTW: 0.0538
+ID 52 | LCS: 0.9425 | Rank: 19 | DTW: 0.3693
+ID 53 | LCS: 0.9829 | Rank:  3 | DTW: 0.4751
+ID 54 | LCS: 0.6142 | Rank: 56 | DTW: 0.3697
+ID 55 | LCS: 0.7523 | Rank: 57 | DTW: 0.1931
+ID 56 | LCS: 0.9582 | Rank:  5 | DTW: 5.4696
+ID 57 | LCS: 0.8716 | Rank: 42 | DTW: 1.1516
+ID 58 | LCS: 0.8738 | Rank: 45 | DTW: 0.7189
+ID 59 | LCS: 0.8333 | Rank: 37 | DTW: 0.0319
+ID 60 | LCS: 0.9712 | Rank: 10 | DTW: 0.2201
+ID 61 | LCS: 0.6698 | Rank: 72 | DTW: 0.3305
+ID 62 | LCS: 0.6420 | Rank: 51 | DTW: 0.2728
+ID 63 | LCS: 0.6266 | Rank: 68 | DTW: 0.4928
+ID 64 | LCS: 0.9474 | Rank: 11 | DTW: 0.0303
+ID 65 | LCS: 0.6203 | Rank: 77 | DTW: 0.1791
+ID 66 | LCS: 0.9845 | Rank:  5 | DTW: 0.2249
+ID 67 | LCS: 0.7854 | Rank: 52 | DTW: 0.4950
+ID 68 | LCS: 0.9289 | Rank: 27 | DTW: 0.1462
+ID 69 | LCS: 0.8062 | Rank: 15 | DTW: 0.5342
+ID 70 | LCS: 0.9083 | Rank: 33 | DTW: 0.0921
+ID 71 | LCS: 0.5153 | Rank: 79 | DTW: 0.1551
+ID 72 | LCS: 0.9277 | Rank: 29 | DTW: 0.9054
+ID 73 | LCS: 0.8235 | Rank: 60 | DTW: 0.6547
+ID 74 | LCS: 0.7315 | Rank: 45 | DTW: 0.7064
+ID 75 | LCS: 0.8536 | Rank: 35 | DTW: 0.8492
+ID 76 | LCS: 0.8839 | Rank: 36 | DTW: 0.6996
+ID 77 | LCS: 0.9119 | Rank: 33 | DTW: 1.0923
+ID 78 | LCS: 0.9394 | Rank: 21 | DTW: 0.7143
+ID 79 | LCS: 0.9600 | Rank: 14 | DTW: 0.1574
+ID 80 | LCS: 0.7945 | Rank: 64 | DTW: 1.6236
+==================================================
+RESUMEN GENERAL:
+Pares evaluados: 80
+LCS Promedio:    0.8444
+MRR:             0.0449
+Top-5 Precision: 3.75%
+DTW Promedio:    0.8773
+==================================================

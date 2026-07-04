@@ -1,0 +1,141 @@
+REPORTE DETALLADO - METODO: crepe
+==================================================
+ID 01 | LCS: 0.7603 | Rank: 71 | DTW: 42.5891
+ID 02 | LCS: 0.7926 | Rank: 69 | DTW: 46.1715
+ID 03 | LCS: 0.8239 | Rank: 18 | DTW: 37.2552
+ID 04 | LCS: 0.9440 | Rank:  9 | DTW: 40.5185
+ID 05 | LCS: 0.8592 | Rank: 30 | DTW: 35.4593
+ID 06 | LCS: 0.8543 | Rank: 25 | DTW: 65.8891
+ID 07 | LCS: 0.7551 | Rank: 77 | DTW: 31.3240
+ID 08 | LCS: 0.8104 | Rank: 66 | DTW: 38.0283
+ID 09 | LCS: 0.8972 | Rank: 39 | DTW: 40.5804
+ID 10 | LCS: 0.9081 | Rank: 36 | DTW: 47.4415
+ID 11 | LCS: 0.9138 | Rank: 32 | DTW: 40.0328
+ID 12 | LCS: 0.8195 | Rank: 41 | DTW: 26.9669
+ID 13 | LCS: 0.7592 | Rank: 75 | DTW: 36.0744
+ID 14 | LCS: 0.9603 | Rank:  1 | DTW: 36.2283
+ID 15 | LCS: 0.8260 | Rank: 62 | DTW: 33.1202
+ID 16 | LCS: 0.8520 | Rank: 20 | DTW: 29.7870
+ID 17 | LCS: 0.8402 | Rank: 53 | DTW: 42.6669
+ID 18 | LCS: 0.8187 | Rank: 27 | DTW: 39.0049
+ID 19 | LCS: 0.7067 | Rank: 80 | DTW: 42.7852
+ID 20 | LCS: 0.8409 | Rank: 36 | DTW: 39.8498
+ID 21 | LCS: 0.8314 | Rank: 40 | DTW: 41.5699
+ID 22 | LCS: 0.6915 | Rank: 64 | DTW: 35.3717
+ID 23 | LCS: 0.8485 | Rank:  6 | DTW: 42.5499
+ID 24 | LCS: 0.9043 | Rank: 10 | DTW: 25.2193
+ID 25 | LCS: 0.9038 | Rank: 17 | DTW: 36.2478
+ID 26 | LCS: 0.7435 | Rank: 77 | DTW: 31.3881
+ID 27 | LCS: 0.9367 | Rank:  7 | DTW: 24.8959
+ID 28 | LCS: 0.8787 | Rank: 45 | DTW: 31.6830
+ID 29 | LCS: 0.7065 | Rank: 77 | DTW: 44.8405
+ID 30 | LCS: 0.6588 | Rank: 77 | DTW: 50.0843
+ID 31 | LCS: 0.6879 | Rank: 54 | DTW: 42.4686
+ID 32 | LCS: 0.8205 | Rank: 60 | DTW: 39.4845
+ID 33 | LCS: 0.9091 | Rank:  8 | DTW: 49.5316
+ID 34 | LCS: 0.8429 | Rank: 58 | DTW: 34.6365
+ID 35 | LCS: 0.7522 | Rank: 59 | DTW: 31.1525
+ID 36 | LCS: 0.6603 | Rank: 79 | DTW: 34.9418
+ID 37 | LCS: 0.9176 | Rank: 11 | DTW: 41.0479
+ID 38 | LCS: 0.8688 | Rank: 56 | DTW: 32.4254
+ID 39 | LCS: 0.7734 | Rank: 22 | DTW: 41.6419
+ID 40 | LCS: 0.9054 | Rank:  8 | DTW: 29.3662
+ID 41 | LCS: 0.9065 | Rank: 12 | DTW: 36.8476
+ID 42 | LCS: 0.8180 | Rank: 68 | DTW: 43.7994
+ID 43 | LCS: 0.9443 | Rank:  9 | DTW: 51.5906
+ID 44 | LCS: 0.7812 | Rank: 75 | DTW: 37.7547
+ID 45 | LCS: 0.9234 | Rank:  8 | DTW: 48.2319
+ID 46 | LCS: 0.6813 | Rank: 42 | DTW: 47.7749
+ID 47 | LCS: 0.9479 | Rank:  1 | DTW: 38.8260
+ID 48 | LCS: 0.9255 | Rank: 20 | DTW: 38.0295
+ID 49 | LCS: 0.7575 | Rank: 10 | DTW: 41.3255
+ID 50 | LCS: 0.8728 | Rank: 50 | DTW: 54.4236
+ID 51 | LCS: 0.8906 | Rank: 42 | DTW: 40.9279
+ID 52 | LCS: 0.9205 | Rank:  9 | DTW: 33.0077
+ID 53 | LCS: 0.9605 | Rank:  6 | DTW: 47.5166
+ID 54 | LCS: 0.7949 | Rank: 60 | DTW: 31.9324
+ID 55 | LCS: 0.8358 | Rank: 60 | DTW: 37.8832
+ID 56 | LCS: 0.8348 | Rank: 34 | DTW: 27.0362
+ID 57 | LCS: 0.7568 | Rank: 63 | DTW: 52.7321
+ID 58 | LCS: 0.8278 | Rank: 22 | DTW: 43.9391
+ID 59 | LCS: 0.8105 | Rank: 67 | DTW: 40.8627
+ID 60 | LCS: 0.8615 | Rank: 17 | DTW: 34.7253
+ID 61 | LCS: 0.7356 | Rank: 78 | DTW: 33.8007
+ID 62 | LCS: 0.7205 | Rank: 68 | DTW: 41.9407
+ID 63 | LCS: 0.9438 | Rank:  8 | DTW: 29.8811
+ID 64 | LCS: 0.8747 | Rank: 41 | DTW: 42.7924
+ID 65 | LCS: 0.8103 | Rank: 18 | DTW: 43.9134
+ID 66 | LCS: 0.8732 | Rank: 36 | DTW: 51.4637
+ID 67 | LCS: 0.9322 | Rank: 12 | DTW: 63.7251
+ID 68 | LCS: 0.9351 | Rank: 19 | DTW: 55.5104
+ID 69 | LCS: 0.9020 | Rank: 34 | DTW: 41.2823
+ID 70 | LCS: 0.9577 | Rank:  2 | DTW: 35.3801
+ID 71 | LCS: 0.9056 | Rank: 40 | DTW: 32.5305
+ID 72 | LCS: 0.8988 | Rank: 38 | DTW: 41.4259
+ID 73 | LCS: 0.8039 | Rank: 61 | DTW: 34.5928
+ID 74 | LCS: 0.8130 | Rank: 66 | DTW: 49.5792
+ID 75 | LCS: 0.8473 | Rank: 45 | DTW: 58.1064
+ID 76 | LCS: 0.8536 | Rank: 59 | DTW: 50.5942
+ID 77 | LCS: 0.8058 | Rank:  9 | DTW: 44.9018
+ID 78 | LCS: 0.7826 | Rank: 57 | DTW: 33.9180
+ID 79 | LCS: 0.9020 | Rank: 24 | DTW: 32.7025
+ID 80 | LCS: 0.8747 | Rank: 16 | DTW: 26.0361
+==================================================
+RESUMEN GENERAL:
+Pares evaluados: 80
+LCS Promedio:    0.8401
+MRR:             0.0745
+Top-5 Precision: 3.75%
+DTW Promedio:    40.0696
+==================================================
+ANALISIS DE UMBRALES DE CLASIFICACION BINARIA (OPTIMIZANDO F1-SCORE):
+
+--- Metrica: LCS (Subsecuencia Comun) ---
+  Umbral Optimo:  0.9000
+  F1-Score:       0.0315
+  Precision:      0.0166
+  Recall (Sens.): 0.3000
+  Accuracy:       0.7694
+  Matriz de Confusion:
+    - TP (True Pos.):  24
+    - FP (False Pos.): 1420
+    - FN (False Neg.): 56
+    - TN (True Neg.):  4900
+
+--- Metrica: Levenshtein (Distancia Edicion) ---
+  Umbral Optimo:  0.9000
+  F1-Score:       0.0323
+  Precision:      0.0192
+  Recall (Sens.): 0.1000
+  Accuracy:       0.9250
+  Matriz de Confusion:
+    - TP (True Pos.):  8
+    - FP (False Pos.): 408
+    - FN (False Neg.): 72
+    - TN (True Neg.):  5912
+
+--- Metrica: Pitch Class Histogram (Croma Coseno) ---
+  Umbral Optimo:  0.9500
+  F1-Score:       0.1302
+  Precision:      0.1236
+  Recall (Sens.): 0.1375
+  Accuracy:       0.9770
+  Matriz de Confusion:
+    - TP (True Pos.):  11
+    - FP (False Pos.): 78
+    - FN (False Neg.): 69
+    - TN (True Neg.):  6242
+
+--- Metrica: DTW Distance (Camino Optimo) ---
+  Umbral Optimo:  65.8891
+  F1-Score:       1.0000
+  Precision:      1.0000
+  Recall (Sens.): 1.0000
+  Accuracy:       1.0000
+  Matriz de Confusion:
+    - TP (True Pos.):  80
+    - FP (False Pos.): 0
+    - FN (False Neg.): 0
+    - TN (True Neg.):  0
+
+==================================================
