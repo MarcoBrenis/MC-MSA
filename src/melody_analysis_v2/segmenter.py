@@ -10,13 +10,6 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import find_peaks
 
-from .config import (
-    CHECKERBOARD_RADIUS,
-    KERNEL_SIZE,
-    PEAK_THRESHOLD,
-    MIN_SEPARATION,
-    NUMERICAL_EPSILON,
-)
 from .features import MelodyFeatures
 
 
@@ -47,11 +40,11 @@ class MelodySegmenter:
     def __init__(
         self,
         *,
-        kernel_size: int = KERNEL_SIZE,
-        peak_threshold: float = PEAK_THRESHOLD,
-        min_separation: int = MIN_SEPARATION,
+        kernel_size: int = 2,
+        peak_threshold: float = 0.2,
+        min_separation: int = 10,
         use_self_similarity: bool = True,
-        checkerboard_radius: int = CHECKERBOARD_RADIUS,
+        checkerboard_radius: int = 8,
         max_ssm_frames: int = 3000,
         filter_type: str = "gaussian",
     ) -> None:

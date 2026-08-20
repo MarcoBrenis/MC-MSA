@@ -1,21 +1,5 @@
 """Clon experimental del paquete de análisis y segmentación melódica."""
 
-from .config import (
-    FS,
-    HOP_LENGTH,
-    RMS_FRAME_LENGTH,
-    CHECKERBOARD_RADIUS,
-    KERNEL_SIZE,
-    PEAK_THRESHOLD,
-    MIN_SEPARATION,
-    W_BASE,
-    W_COMBINED,
-    TAIL_PROPORTION,
-    SLOPE_EPSILON,
-    ENERGY_TAU,
-    NUMERICAL_EPSILON,
-    MCMSAHyperparameters,
-)
 from .features import MelodyFeatures, extract_melody_features
 from .segmenter import MelodySegment, MelodySegmenter
 from .segmenter_beta import MelodySegmenterBeta
