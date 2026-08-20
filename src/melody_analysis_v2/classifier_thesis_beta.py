@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import List, Optional
 import numpy as np
 
+from .config import MIN_VOICING_THRESH, TAIL_PROPORTION, SLOPE_EPSILON, ENERGY_TAU
 from .features import MelodyFeatures
 from .segmenter import MelodySegment
 from .classifier import MelodySegmentAnnotation
@@ -18,10 +19,10 @@ class MelodyClassifierThesisBeta:
     def __init__(
         self,
         *,
-        min_voicing_thresh: float = 0.0,
-        tail_proportion: float = 0.20,
-        slope_epsilon: float = 0.15,
-        energy_tau: float = 0.30,
+        min_voicing_thresh: float = MIN_VOICING_THRESH,
+        tail_proportion: float = TAIL_PROPORTION,
+        slope_epsilon: float = SLOPE_EPSILON,
+        energy_tau: float = ENERGY_TAU,
     ) -> None:
         self.min_voicing_thresh = min_voicing_thresh
         self.tail_proportion = tail_proportion
