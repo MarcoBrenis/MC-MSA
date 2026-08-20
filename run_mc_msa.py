@@ -831,6 +831,50 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     except Exception as e:
         print(f"Error writing comparative table: {e}")
 
+    # Generate specialized Academic Paper / Thesis Format Table (Exact Match to LaTeX Header)
+    academic_lines = []
+    academic_lines.append(f"{'Dataset':<15} | {'Method':<20} | {'MRR (%)':<10} | {'MAP (%)':<10} | {'MR':<8} | {'MDR':<8} | {'Top-5 (%)':<10} | {'Top-10 (%)':<10}")
+    academic_lines.append("-" * 105)
+
+    for method in sorted_methods:
+        row = method_rows[method]
+        method_disp = method.upper()
+        
+        def get_val(name, is_pct=False, fmt=".2f", default="N/A"):
+            idx = header_indices.get(name.lower())
+            if idx is not None and idx < len(row) and row[idx] != "":
+                try:
+                    val = float(row[idx])
+                    if is_pct:
+                        val *= 100
+                    return f"{val:{fmt}}"
+                except ValueError:
+                    return row[idx]
+            return default
+
+        try:
+            mrr_pct = get_val("mrr", is_pct=True)
+            map_pct = get_val("map", is_pct=True)
+            mr = get_val("mr")
+            mdr = get_val("mdr", fmt=".1f")
+            top5_pct = get_val("top5_prec", is_pct=True)
+            top10_pct = get_val("top10_prec" if "top10_prec" in header_indices else "top10", is_pct=True)
+            
+            row_str = f"{dataset_name:<15} | {method_disp:<20} | {mrr_pct:<10} | {map_pct:<10} | {mr:<8} | {mdr:<8} | {top5_pct:<10} | {top10_pct:<10}"
+            academic_lines.append(row_str)
+        except Exception:
+            pass
+
+    academic_content = "\n".join(academic_lines) + "\n"
+    academic_path = dataset_dir / "academic_summary_table.txt"
+    try:
+        academic_path.write_text(academic_content, encoding='utf-8')
+        print(f"[Academic Table] Successfully saved at {academic_path}")
+        print("\n=== TABLA FORMATO ACADÉMICO / TESIS ===")
+        print(academic_content)
+    except Exception as e:
+        print(f"Error writing academic table: {e}")
+
 
 def find_available_datasets(directory: Path):
     datasets = []

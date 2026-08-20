@@ -512,6 +512,8 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
             avg_lcs = float(np.mean(lcs_sims)) if lcs_sims else 0.0
             avg_mr = float(np.mean(ranks)) if ranks else 0.0
             avg_mrr = float(np.mean(mrrs)) if mrrs else 0.0
+            avg_mdr = float(np.median(ranks)) if ranks else 0.0
+            avg_map = float(np.mean(mrrs)) if mrrs else 0.0  # MAP for single target = MRR
             avg_top5 = float(np.mean(top5_hits)) if top5_hits else 0.0
             avg_top10 = float(np.mean(top10_hits)) if top10_hits else 0.0
 
@@ -519,12 +521,14 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
                 "lcs": avg_lcs,
                 "mr": avg_mr,
                 "mrr": avg_mrr,
+                "mdr": avg_mdr,
+                "map": avg_map,
                 "top5": avg_top5,
                 "top10": avg_top10
             }
 
             if combo_idx % 10 == 0 or combo_idx == len(grid_combinations):
-                print(f"    Evaluated {combo_idx}/{len(grid_combinations)} combinations -> Latest (L={r}, σ={k}, τ_pk={pk:.2f}): LCS={avg_lcs:.4f}, MRR={avg_mrr:.4f}, Top5={avg_top5*100:.2f}%")
+                print(f"    Evaluated {combo_idx}/{len(grid_combinations)} combinations -> Latest (L={r}, σ={k}, τ_pk={pk:.2f}): MRR={avg_mrr*100:.2f}%, MAP={avg_map*100:.2f}%, MR={avg_mr:.2f}, MDR={avg_mdr:.1f}, Top-5={avg_top5*100:.2f}%, Top-10={avg_top10*100:.2f}%")
 
         # Write Phase 2 results into organized CSV files
         all_combos_results = []
@@ -533,29 +537,36 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
         detailed_csv_path.parent.mkdir(parents=True, exist_ok=True)
         
         with open(detailed_csv_path, 'w', encoding='utf-8') as f_det:
-            f_det.write("combo_id,method,dataset,pairs,checkerboard_radius_L,kernel_sigma,peak_threshold,tail_proportion_y,slope_epsilon,energy_tau,avg_lcs,mr,mrr,top5_prec,top10_prec\n")
+            f_det.write("combo_id,method,dataset,pairs,checkerboard_radius_L,kernel_sigma,peak_threshold,tail_proportion_y,slope_epsilon,energy_tau,avg_lcs,mr,mdr,mrr,mrr_pct,map_pct,top5_prec,top10_prec\n")
             for combo_idx, (combo, m) in enumerate(combo_metrics.items(), 1):
                 r, k, pk, tl, se, et = combo
                 avg_lcs = m["lcs"]
                 avg_mr = m["mr"]
                 avg_mrr = m["mrr"]
+                avg_mdr = m["mdr"]
+                avg_map = m["map"]
                 top5_prec = m["top5"]
                 top10_prec = m["top10"]
 
                 with open(summary_path, 'a', encoding='utf-8') as f_sum:
-                    f_sum.write(f"{method},{n_valid},{avg_lcs:.4f},{avg_mr:.2f},{avg_mrr:.4f},{avg_mr:.2f},{avg_mrr:.4f},{top5_prec:.4f},{top10_prec:.4f},0.00,{r},{k},{pk:.2f},{tl:.2f},{se:.2f},{et:.2f}\n")
+                    f_sum.write(f"{method},{n_valid},{avg_lcs:.4f},{avg_mr:.2f},{avg_mrr:.4f},{avg_mdr:.1f},{avg_map:.4f},{top5_prec:.4f},{top10_prec:.4f},0.00,{r},{k},{pk:.2f},{tl:.2f},{se:.2f},{et:.2f}\n")
                 
-                f_det.write(f"{combo_idx},{method},{dataset_dir.name},{n_valid},{r},{k},{pk:.2f},{tl:.2f},{se:.2f},{et:.2f},{avg_lcs:.4f},{avg_mr:.2f},{avg_mrr:.4f},{top5_prec:.4f},{top10_prec:.4f}\n")
-                all_combos_results.append((avg_lcs, avg_mr, avg_mrr, top5_prec, top10_prec))
+                f_det.write(f"{combo_idx},{method},{dataset_dir.name},{n_valid},{r},{k},{pk:.2f},{tl:.2f},{se:.2f},{et:.2f},{avg_lcs:.4f},{avg_mr:.2f},{avg_mdr:.1f},{avg_mrr:.4f},{avg_mrr*100:.2f},{avg_map*100:.2f},{top5_prec:.4f},{top10_prec:.4f}\n")
+                all_combos_results.append((avg_lcs, avg_mr, avg_mdr, avg_mrr, avg_map, top5_prec, top10_prec))
 
         mean_lcs = float(np.mean([res[0] for res in all_combos_results])) if all_combos_results else 0.0
         mean_mr = float(np.mean([res[1] for res in all_combos_results])) if all_combos_results else 0.0
-        mean_mrr = float(np.mean([res[2] for res in all_combos_results])) if all_combos_results else 0.0
-        mean_top5 = float(np.mean([res[3] for res in all_combos_results])) if all_combos_results else 0.0
-        mean_top10 = float(np.mean([res[4] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_mdr = float(np.median([res[2] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_mrr = float(np.mean([res[3] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_map = float(np.mean([res[4] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_top5 = float(np.mean([res[5] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_top10 = float(np.mean([res[6] for res in all_combos_results])) if all_combos_results else 0.0
 
         print(f"\n  [{method.upper()}] Experiments finished. Results saved to CSV: {detailed_csv_path}")
-        print(f"  [{method.upper()}] Overall Average -> LCS: {mean_lcs:.4f}, MR: {mean_mr:.2f}, MRR: {mean_mrr:.4f}, Top-5: {mean_top5*100:.2f}%, Top-10: {mean_top10*100:.2f}%")
+        print(f"\n  === TABLA ACADÉMICA DE RESULTADOS EMPÍRICOS ({method.upper()}) ===")
+        print(f"  {'Dataset':<15} | {'Method':<12} | {'MRR (%)':<10} | {'MAP (%)':<10} | {'MR':<8} | {'MDR':<8} | {'Top-5 (%)':<10} | {'Top-10 (%)':<10}")
+        print(f"  {'-'*95}")
+        print(f"  {dataset_dir.name:<15} | {method.upper():<12} | {mean_mrr*100:<10.2f} | {mean_map*100:<10.2f} | {mean_mr:<8.2f} | {mean_mdr:<8.1f} | {mean_top5*100:<10.2f} | {mean_top10*100:<10.2f}")
 
     print("\nCustom Parameter Experiments Completed Successfully!")
 
