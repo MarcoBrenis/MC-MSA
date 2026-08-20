@@ -48,6 +48,16 @@ from src.melody_analysis_v2.segmenter import MelodySegmenter, MelodySegment
 from src.melody_analysis_v2.features import MelodyFeatures
 
 
+# Default Hyperparameter Ranges for Empirical Grid Search (Single Source of Truth)
+DEFAULT_RADII = [4, 6, 8, 10, 12]                         # L: 2D Gaussian kernel radius
+DEFAULT_KERNEL_SIZES = [2, 3, 4, 5, 6]                    # σ: 1D Gaussian smoothing
+DEFAULT_PEAK_THRESHOLDS = [0.10, 0.15, 0.20, 0.25, 0.30]  # τ_peak: Peak threshold
+DEFAULT_MIN_SEPARATIONS = [10, 20, 30, 40, 50]            # d_min: Min boundary separation
+DEFAULT_TAIL_PROPORTIONS = [0.10, 0.15, 0.20, 0.25, 0.30] # L_tail (p): Tail proportion
+DEFAULT_SLOPE_EPSILONS = [0.05, 0.10, 0.15, 0.20, 0.30]   # ε_slope: F0 slope threshold
+DEFAULT_ENERGY_TAUS = [0.15, 0.20, 0.30, 0.40, 0.50]      # τ_E: Energy threshold
+
+
 def load_features_fast(analyzer, file_path, method, cache_dir):
     method_dir = cache_dir / method
     cache_path = method_dir / f"{file_path.stem}.json"
@@ -279,13 +289,13 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
                 pass
 
         # Parameter grid combinations matching thesis hyperparameters table
-        grid_r = args.radii if args.radii else [4, 6, 8, 10, 12]
-        grid_k = args.kernel_sizes if args.kernel_sizes else [2, 3, 4, 5, 6]
-        grid_pk = args.peak_thresholds if args.peak_thresholds else [0.10, 0.15, 0.20, 0.25, 0.30]
-        grid_dm = getattr(args, 'min_separations', None) or [10, 20, 30, 40, 50]
-        grid_tl = args.tail_proportions if args.tail_proportions else [0.10, 0.15, 0.20, 0.25, 0.30]
-        grid_se = args.slope_epsilons if args.slope_epsilons else [0.05, 0.10, 0.15, 0.20, 0.30]
-        grid_et = args.energy_taus if args.energy_taus else [0.15, 0.20, 0.30, 0.40, 0.50]
+        grid_r = args.radii if args.radii else DEFAULT_RADII
+        grid_k = args.kernel_sizes if args.kernel_sizes else DEFAULT_KERNEL_SIZES
+        grid_pk = args.peak_thresholds if args.peak_thresholds else DEFAULT_PEAK_THRESHOLDS
+        grid_dm = getattr(args, 'min_separations', None) or DEFAULT_MIN_SEPARATIONS
+        grid_tl = args.tail_proportions if args.tail_proportions else DEFAULT_TAIL_PROPORTIONS
+        grid_se = args.slope_epsilons if args.slope_epsilons else DEFAULT_SLOPE_EPSILONS
+        grid_et = args.energy_taus if args.energy_taus else DEFAULT_ENERGY_TAUS
 
         grid_combinations = list(itertools.product(grid_r, grid_k, grid_pk, grid_tl, grid_se, grid_et))
         if getattr(args, 'max_grid_evals', None) and args.max_grid_evals < len(grid_combinations):
@@ -577,17 +587,17 @@ def main():
                         help="Match method")
     
     # Empirical Parameter Ranges/Fluctuations
-    parser.add_argument("--radii", nargs="+", type=int, default=[4, 6, 8, 10, 12],
+    parser.add_argument("--radii", nargs="+", type=int, default=DEFAULT_RADII,
                         help="L: Radii range of the 2D Gaussian checkerboard kernel")
-    parser.add_argument("--kernel_sizes", nargs="+", type=int, default=[2, 3, 4, 5],
+    parser.add_argument("--kernel_sizes", nargs="+", type=int, default=DEFAULT_KERNEL_SIZES,
                         help="σ: Standard deviation range for 1D Gaussian smoothing (starts at 2)")
-    parser.add_argument("--peak_thresholds", nargs="+", type=float, default=[0.10, 0.15, 0.20, 0.25, 0.30],
+    parser.add_argument("--peak_thresholds", nargs="+", type=float, default=DEFAULT_PEAK_THRESHOLDS,
                         help="τpeak: Minimum peak height threshold range (0 to 1)")
-    parser.add_argument("--tail_proportions", nargs="+", type=float, default=[0.10, 0.15, 0.20, 0.25, 0.30],
+    parser.add_argument("--tail_proportions", nargs="+", type=float, default=DEFAULT_TAIL_PROPORTIONS,
                         help="y: Tail proportion of non-extreme notes (starts at 0.10)")
-    parser.add_argument("--slope_epsilons", nargs="+", type=float, default=[0.05, 0.10, 0.15, 0.20, 0.25],
+    parser.add_argument("--slope_epsilons", nargs="+", type=float, default=DEFAULT_SLOPE_EPSILONS,
                         help="εslope: Slope threshold for flat contour classification")
-    parser.add_argument("--energy_taus", nargs="+", type=float, default=[0.15, 0.30, 0.45],
+    parser.add_argument("--energy_taus", nargs="+", type=float, default=DEFAULT_ENERGY_TAUS,
                         help="τE: List of energy thresholds to evaluate")
     parser.add_argument("--phase", type=str, default="both",
                         choices=["0", "1", "2", "both", "all_phases"],
