@@ -135,7 +135,7 @@ class MelodySegmenter:
         if np.max(energy_diff) > 0:
             energy_diff = energy_diff / np.max(energy_diff)
 
-        base_novelty = 0.7 * pitch_diff + 0.3 * energy_diff
+        base_novelty = pitch_diff + energy_diff
         base_novelty = gaussian_filter1d(base_novelty, sigma=self.kernel_size)
 
         if not self.use_self_similarity:
@@ -146,7 +146,7 @@ class MelodySegmenter:
         sim = self.compute_self_similarity(features)
         ssm_novelty = self.compute_checkerboard_novelty(sim)
 
-        combined = (1.0 - self.ssm_weight) * base_novelty + self.ssm_weight * ssm_novelty
+        combined = ssm_novelty
         if np.max(combined) > 0:
             combined = combined / np.max(combined)
 
@@ -165,7 +165,7 @@ class MelodySegmenter:
         else:
             height = self.peak_threshold
 
-        peaks, _ = find_peaks(novelty, height=height, distance=self.min_separation)
+        peaks, _ = find_peaks(novelty, height=height)
         return peaks.astype(int)
 
     def segment(self, features: MelodyFeatures) -> List[MelodySegment]:

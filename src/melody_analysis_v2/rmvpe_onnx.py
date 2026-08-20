@@ -101,6 +101,8 @@ class RMVPE:
             
             total_prob[write_start:write_end, :] = prob[read_start:read_end, :]
             
+            del chunk, mel_input, outputs, prob
+            
         del mel_padded
         gc.collect()
         

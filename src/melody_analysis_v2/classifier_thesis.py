@@ -18,19 +18,19 @@ class MelodyClassifierThesis:
     def __init__(
         self,
         *,
-        min_voicing_thresh: float = 0.0,
         slope_epsilon: float = 0.15,
         energy_tau: float = 0.3,
+        tail_proportion: float = 0.2,
     ) -> None:
-        self.min_voicing_thresh = min_voicing_thresh
         self.slope_epsilon = slope_epsilon
         self.energy_tau = energy_tau
+        self.tail_proportion = tail_proportion
 
     def _safe_polyfit(self, x: np.ndarray, y: np.ndarray, deg: int = 1) -> float:
         """Calculates linear slope safely handling empty arrays and NaN."""
         if x.size < 2 or y.size < 2:
             return 0.0
-        mask = ~np.isnan(y)
+        mask = (y > 0) & (~np.isnan(y))
         if np.sum(mask) < 2:
             return 0.0
         try:
@@ -52,18 +52,17 @@ class MelodyClassifierThesis:
             pitch = features.pitch_midi[idx]
             energy = features.energy[idx]
             times = features.times[idx]
-            voicing = features.confidence[idx]
             
-            # 1. Class 'X' (Noise/Silence)
-            mean_voicing = float(np.mean(voicing)) if voicing.size > 0 else 0.0
+            # 1. Class 'Silence' (if no valid f0 pitch in segment)
+            valid_pitch_mask = (pitch > 0) & (~np.isnan(pitch))
             
-            if mean_voicing < self.min_voicing_thresh:
+            if np.sum(valid_pitch_mask) < 2:
                 label = "Silence"
-                confidence = 1.0 - mean_voicing
-                descriptor = {"mean_voicing": mean_voicing, "reason": "Low voicing"}
+                confidence = 1.0
+                descriptor = {"f0_slope": 0.0, "energy_tail": 0.0}
             else:
-                # Analyze the last 20% of the segment
-                tail_len = max(1, int(len(pitch) * 0.2))
+                # Analyze the tail of the segment
+                tail_len = max(1, int(len(pitch) * self.tail_proportion))
                 tail_idx = slice(-tail_len, None)
                 
                 tail_pitch = pitch[tail_idx]
@@ -83,17 +82,15 @@ class MelodyClassifierThesis:
                 
                 if slope > self.slope_epsilon or tail_energy > self.energy_tau:
                     label = "Antecedent"
-                    descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
                 elif slope < -self.slope_epsilon and tail_energy < (self.energy_tau / 2.0):
                     label = "Consequent"
-                    descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
                 else:
-                    # Fallback/Ambiguous cases
+                    # Ambiguous cases
                     if slope < 0:
                         label = "Consequent"
                     else:
                         label = "Antecedent"
-                    descriptor = {"f0_slope": slope, "energy_tail": tail_energy, "fallback": True}
+                descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
                 
                 confidence = 0.8 # Fixed confidence for logic-based labels
 
@@ -114,14 +111,15 @@ def calculate_lcs(seq1: List[str], seq2: List[str]) -> float:
     if n == 0 or m == 0:
         return 0.0
     
-    dp = [[0] * (m + 1) for _ in range(n + 1)]
+    prev = [0] * (m + 1)
+    curr = [0] * (m + 1)
     
-    for i in range(1, n + 1):
+    for x in seq1:
         for j in range(1, m + 1):
-            if seq1[i-1] == seq2[j-1]:
-                dp[i][j] = dp[i-1][j-1] + 1
+            if x == seq2[j - 1]:
+                curr[j] = prev[j - 1] + 1
             else:
-                dp[i][j] = max(dp[i-1][j], dp[i][j-1])
+                curr[j] = max(prev[j], curr[j - 1])
+        prev, curr = curr, [0] * (m + 1)
     
-    lcs_len = dp[n][m]
-    return 2.0 * lcs_len / (n + m)
+    return 2.0 * prev[m] / (n + m)

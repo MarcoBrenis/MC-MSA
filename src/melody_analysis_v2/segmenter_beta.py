@@ -41,10 +41,10 @@ class MelodySegmenterBeta:
         """Compute a cosine self-similarity matrix from pitch and energy."""
         stacked = np.vstack((features.pitch_midi, features.energy)).T
         stacked = (stacked - np.mean(stacked, axis=0, keepdims=True)) / (
-            np.std(stacked, axis=0, keepdims=True) + 1e-6
+            np.std(stacked, axis=0, keepdims=True) + 1e-40
         )
         norms = np.linalg.norm(stacked, axis=1, keepdims=True)
-        normalized = stacked / np.maximum(norms, 1e-6)
+        normalized = stacked / np.maximum(norms, 1e-40)
 
         sim = normalized @ normalized.T
         sim = (sim + 1.0) / 2.0

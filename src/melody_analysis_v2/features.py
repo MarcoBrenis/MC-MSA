@@ -44,6 +44,35 @@ except ImportError:
 # Global model cache to prevent OOM
 _MODEL_CACHE = {}
 
+def clear_deep_learning_caches():
+    """Aggressively clear python dicts, PyTorch MPS/CUDA caches, TensorFlow sessions, and trigger GC."""
+    if "rmvpe" in _MODEL_CACHE:
+        try:
+            del _MODEL_CACHE["rmvpe"].session
+        except Exception:
+            pass
+
+    _MODEL_CACHE.clear()
+    
+    # PyTorch memory flush
+    if torch is not None:
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            if hasattr(torch, 'mps') and hasattr(torch.mps, 'empty_cache'):
+                torch.mps.empty_cache()
+        except Exception:
+            pass
+
+    # TensorFlow Keras session clear
+    try:
+        import tensorflow as tf
+        tf.keras.backend.clear_session()
+    except Exception:
+        pass
+
+    gc.collect()
+
 @dataclass
 class MelodyFeatures:
     """Container for features derived from a melody contour."""
@@ -67,6 +96,39 @@ class MelodyFeatures:
         if self.times.size == 0:
             return 0.0
         return float(self.times[-1] - self.times[0])
+
+    @classmethod
+    def from_dict(cls, data: dict) -> MelodyFeatures:
+        """Construct MelodyFeatures from a dictionary (e.g. deserialized JSON)."""
+        feat_data = data.get("features", data)
+
+        def _to_array(val, default_len=0):
+            if val is None:
+                return np.full(default_len, np.nan, dtype=float)
+            clean = [np.nan if x is None or (isinstance(x, float) and np.isnan(x)) else float(x) for x in val]
+            return np.array(clean, dtype=float)
+
+        times = _to_array(feat_data.get("times"))
+        pitch_midi = _to_array(feat_data.get("pitch_midi"), default_len=len(times))
+        confidence = _to_array(feat_data.get("confidence"), default_len=len(times))
+        energy = _to_array(feat_data.get("energy"), default_len=len(times))
+
+        n_frames = len(times)
+        if n_frames > 0:
+            if len(pitch_midi) != n_frames:
+                pitch_midi = np.full(n_frames, np.nan, dtype=float)
+            if len(confidence) != n_frames:
+                confidence = np.ones(n_frames, dtype=float)
+            if len(energy) != n_frames:
+                energy = np.ones(n_frames, dtype=float)
+
+        return cls(
+            times=times,
+            pitch_midi=pitch_midi,
+            confidence=confidence,
+            energy=energy
+        )
+
 
 
 def _interpolate_nans(values: np.ndarray) -> np.ndarray:
@@ -493,13 +555,13 @@ def _extract_bs_roformer_rmvpe(
     models_base_dir = Path(__file__).parent / "models"
     rmvpe_model_path = models_base_dir / "rmvpe.onnx"
     
-    # Use cached RMVPE instance if available
+    # Pitch Extraction with RMVPE - Instantiate per file to release C-level ONNX runtime memory
     from .rmvpe_onnx import RMVPE
-    if "rmvpe_instance" not in _MODEL_CACHE:
-        _MODEL_CACHE["rmvpe_instance"] = RMVPE(str(rmvpe_model_path))
-    
-    rmvpe_model = _MODEL_CACHE["rmvpe_instance"]
+    rmvpe_model = RMVPE(str(rmvpe_model_path))
     f0, conf = rmvpe_model.infer(vocals_np, sample_rate)
+    
+    del rmvpe_model.session
+    del rmvpe_model
 
     # Cleanup vocals array after extraction
     del vocals_np
@@ -696,14 +758,15 @@ def _extract_rmvpe(
     if not rmvpe_model_path.exists():
          raise FileNotFoundError(f"RMVPE model not found at {rmvpe_model_path}")
 
-    # Run RMVPE
+    # Run RMVPE - Instantiate per file to release C-level ONNX runtime memory
     from .rmvpe_onnx import RMVPE
-    if "rmvpe" not in _MODEL_CACHE:
-        print("Cargando modelo RMVPE...")
-        _MODEL_CACHE["rmvpe"] = RMVPE(str(rmvpe_model_path))
-    
-    rmvpe_model = _MODEL_CACHE["rmvpe"]
+    rmvpe_model = RMVPE(str(rmvpe_model_path))
     f0, conf = rmvpe_model.infer(audio, sample_rate)
+    
+    # Immediately release ONNX Inference Session
+    del rmvpe_model.session
+    del rmvpe_model
+    gc.collect()
 
     # Align and Convert (RMVPE is 10ms/160 samples at 16kHz)
     pitch_midi = np.zeros_like(f0)
@@ -714,8 +777,11 @@ def _extract_rmvpe(
     rmvpe_hop_s = 160 / 16000.0
     rmvpe_times = np.arange(len(pitch_midi)) * rmvpe_hop_s
     
-    n_target_frames = int(np.ceil(len(audio) / hop_length))
-    target_times = librosa.frames_to_time(np.arange(n_target_frames), sr=sample_rate, hop_length=hop_length)
+    target_hop = int(hop_length * (sample_rate / 44100.0)) if sample_rate != 44100 else hop_length
+    if target_hop < 1:
+        target_hop = 1
+    n_target_frames = int(np.ceil(len(audio) / target_hop))
+    target_times = librosa.frames_to_time(np.arange(n_target_frames), sr=sample_rate, hop_length=target_hop)
 
     f_pitch = interp1d(rmvpe_times, pitch_midi, kind='linear', fill_value="extrapolate", bounds_error=False)
     f_conf = interp1d(rmvpe_times, conf, kind='linear', fill_value="extrapolate", bounds_error=False)
@@ -894,9 +960,9 @@ def extract_melody_features(
     sample_rate: int,
     *,
     method: str = "pyin",
-    hop_length: int = 512,
-    fmin: float = 65.0,
-    fmax: float = 1000.0,
+    hop_length: int = 441,
+    fmin: float = 65.41,  # C2
+    fmax: float = 2093.00,  # C7
     frame_length: int = 2048,
     label: str = "",
 ) -> MelodyFeatures:
@@ -998,7 +1064,7 @@ def extract_melody_features(
     # (Note: we keep the confidence low so the classifier/segmenter knows it's unvoiced)
     pitch_midi = _interpolate_nans(pitch_midi)
 
-    # Compute energy using RMS and align to pitch frames.
+    # Compute energy using RMS (x_rms[n] = sqrt( (1/N) * sum_{i=0}^{N-1} x^2[n-i] )) and align to pitch frames.
     energy = librosa.feature.rms(
         y=audio,
         frame_length=frame_length,
@@ -1025,4 +1091,4 @@ def extract_melody_features(
     return MelodyFeatures(times=times, pitch_midi=pitch_midi, confidence=confidence, energy=energy)
 
 
-__all__ = ["MelodyFeatures", "extract_melody_features"]
+__all__ = ["MelodyFeatures", "extract_melody_features", "clear_deep_learning_caches"]

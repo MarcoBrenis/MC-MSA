@@ -14,21 +14,27 @@ from src.melody_analysis_v2.features import MelodyFeatures
 from src.melody_analysis_v2.segmenter import MelodySegment
 from src.melody_analysis_v2.classifier import MelodySegmentAnnotation
 
+def safe_json(o):
+    if isinstance(o, (np.bool_, bool)):
+        return bool(o)
+    if isinstance(o, np.integer):
+        return int(o)
+    if isinstance(o, np.floating):
+        return float(o)
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    return str(o)
+
 def load_or_analyze_in_sub(analyzer, file_path, method, cache_dir, label_prefix=""):
     cache_path = cache_dir / method / f"{file_path.stem}.json"
     if cache_path.exists():
         try:
             with open(cache_path, 'r') as f:
                 data = json.load(f)
-            features = MelodyFeatures(
-                times=np.array(data["times"]),
-                pitch_midi=np.array(data["pitch_midi"]),
-                confidence=np.array(data["confidence"]),
-                energy=np.array(data["energy"])
-            )
+            features = MelodyFeatures.from_dict(data)
             result = analyzer.analyze_features(features)
             with open(cache_path, 'w') as f:
-                json.dump(result.to_dict(), f)
+                json.dump(result.to_dict(), f, default=safe_json)
             return
         except Exception:
             pass
@@ -36,7 +42,7 @@ def load_or_analyze_in_sub(analyzer, file_path, method, cache_dir, label_prefix=
     result = analyzer.analyze_file(str(file_path), label_prefix=label_prefix)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_path, 'w') as f:
-        json.dump(result.to_dict(), f)
+        json.dump(result.to_dict(), f, default=safe_json)
 
 def main():
     parser = argparse.ArgumentParser()

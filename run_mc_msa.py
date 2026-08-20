@@ -41,6 +41,7 @@ METHOD_CLASSIFICATION = {
     'poliner': 'Melody Extractor (Melody Extractor - Poliner & Ellis STFT Peak)',
     'durrieu': 'Melody Extractor (Melody Extractor - Durrieu NMF+YIN)',
     'ensemble': 'Hybrid (Ensemble F0/Melody)',
+    'tesis': 'Métodos Selección Tesis (YIN, pYIN, Melodia, SPICE, CREPE, RMVPE, FCN-f0, Demucs+CREPE)',
     'all_f0': 'All F0 extractors',
     'all_melody': 'All Melody extractors',
     'all': 'All methods'
@@ -239,6 +240,8 @@ def evaluate_binary_classification(pairwise_results, metric_name, lower_is_bette
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
         f1 = 2.0 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
         accuracy = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0.0
+        fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+        fnr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
         
         curves.append({
             "threshold": t,
@@ -249,7 +252,9 @@ def evaluate_binary_classification(pairwise_results, metric_name, lower_is_bette
             "precision": precision,
             "recall": recall,
             "f1_score": f1,
-            "accuracy": accuracy
+            "accuracy": accuracy,
+            "fpr": fpr,
+            "fnr": fnr
         })
         
         if f1 > best_f1:
@@ -260,6 +265,8 @@ def evaluate_binary_classification(pairwise_results, metric_name, lower_is_bette
                 "recall": recall,
                 "f1_score": f1,
                 "accuracy": accuracy,
+                "fpr": fpr,
+                "fnr": fnr,
                 "tp": tp,
                 "fp": fp,
                 "fn": fn,
@@ -280,6 +287,18 @@ def normalize_label(label: str) -> str:
     return label
 
 
+def safe_json(o):
+    if isinstance(o, (np.bool_, bool)):
+        return bool(o)
+    if isinstance(o, np.integer):
+        return int(o)
+    if isinstance(o, np.floating):
+        return float(o)
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    return str(o)
+
+
 def load_or_analyze(analyzer, file_path, method, cache_dir):
     cache_path = cache_dir / method / f"{file_path.stem}.json"
     if cache_path.exists():
@@ -287,19 +306,14 @@ def load_or_analyze(analyzer, file_path, method, cache_dir):
             with open(cache_path, 'r') as f:
                 data = json.load(f)
             
-            features = MelodyFeatures(
-                times=np.array(data["times"]),
-                pitch_midi=np.array(data["pitch_midi"]),
-                confidence=np.array(data["confidence"]),
-                energy=np.array(data["energy"])
-            )
+            features = MelodyFeatures.from_dict(data)
             # Re-run segmentation and classification dynamically using the cached features
             result = analyzer.analyze_features(features)
             for s in result.segments:
                 s.label = normalize_label(s.label)
             # Save updated classifications back to cache JSON
             with open(cache_path, 'w') as f:
-                json.dump(result.to_dict(), f)
+                json.dump(result.to_dict(), f, default=safe_json)
             return result
         except Exception:
             pass
@@ -309,27 +323,53 @@ def load_or_analyze(analyzer, file_path, method, cache_dir):
         s.label = normalize_label(s.label)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cache_path, 'w') as f:
-        json.dump(result.to_dict(), f)
+        json.dump(result.to_dict(), f, default=safe_json)
     return result
 
 def load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=""):
-    import subprocess
-    import sys
     cache_dir_method = cache_dir / method
     tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
     
     if tiny_path.exists():
         try:
-            with open(tiny_path, 'r') as f:
+            with open(tiny_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             return {
                 'seq': data['seq'],
-                'pitch_midi': np.array(data['pitch_midi'])
+                'pitch_midi': np.array(data['pitch_midi'], dtype=np.float32)
             }
         except Exception:
             pass
+
+    cache_path = cache_dir_method / f"{file_path.stem}.json"
+    if cache_path.exists():
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            seq = [s.get('label', '') for s in data.get('segments', [])]
+            pitch_midi = np.array(data.get('pitch_midi', []), dtype=np.float32)
             
-    # If tiny does not exist, use subprocess pipeline to avoid memory leaks/OOM
+            tiny_data = {
+                'seq': seq,
+                'pitch_midi': pitch_midi.tolist()
+            }
+            try:
+                tiny_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(tiny_path, 'w', encoding='utf-8') as f:
+                    json.dump(tiny_data, f, default=safe_json)
+            except Exception:
+                pass
+
+            return {
+                'seq': seq,
+                'pitch_midi': pitch_midi
+            }
+        except Exception:
+            pass
+
+    # If neither tiny nor normal cache exists, run subprocess
+    import subprocess
+    import sys
     script_path = Path(__file__).parent / "src" / "melody_analysis_v2" / "analyze_single.py"
     cmd = [
         sys.executable,
@@ -341,25 +381,24 @@ def load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix="
     ]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, check=True)
     
-    # Once completed, the normal cache .json is already saved on disk.
-    res = load_or_analyze(analyzer, file_path, method, cache_dir)
-    seq = [s.label for s in res.segments]
-    pitch_midi = res.features.pitch_midi.copy() if res.features.pitch_midi is not None else None
-    
-    # Write the tiny json
+    if cache_path.exists():
+        with open(cache_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        seq = [s.get('label', '') for s in data.get('segments', [])]
+        pitch_midi = np.array(data.get('pitch_midi', []), dtype=np.float32)
+    else:
+        seq, pitch_midi = [], np.array([])
+        
     tiny_data = {
         'seq': seq,
-        'pitch_midi': pitch_midi.tolist() if pitch_midi is not None else []
+        'pitch_midi': pitch_midi.tolist()
     }
     try:
         tiny_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(tiny_path, 'w') as f:
-            json.dump(tiny_data, f)
+        with open(tiny_path, 'w', encoding='utf-8') as f:
+            json.dump(tiny_data, f, default=safe_json)
     except Exception:
         pass
-        
-    del res
-    gc.collect()
         
     return {
         'seq': seq,
@@ -697,7 +736,6 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
         
     dataset_name = dataset_dir.name
     
-    # Read rows from summary_path and keep only the latest row per method
     method_rows = {}
     try:
         with open(summary_path, 'r', encoding='utf-8') as f:
@@ -716,38 +754,21 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
         
     sorted_methods = sorted(list(method_rows.keys()))
     
-    # We want to format columns dynamically based on header presence
-    has_mr = "mr" in header_indices
-    has_mdr = "mdr" in header_indices
-    has_map = "map" in header_indices
-    has_top10 = "top10_prec" in header_indices or "top10" in header_indices
-    has_opt_params = "min_voicing_thresh" in header_indices
-    
     lines = []
-    divider_len = 160 if has_opt_params else 120
-    lines.append("-" * divider_len)
-    lines.append(f"Dataset: {dataset_name}")
-    lines.append("-" * divider_len)
+    divider_len = 185
+    lines.append("=" * divider_len)
+    lines.append(f"TABLA DE RESULTADOS STANDARIZADA - MC-MSA Baseline ({dataset_name})")
+    lines.append("=" * divider_len)
     
-    # Header line
-    hdr_cols = [f"{'Method':<25}", f"{'Avg. LCS (%)':<14}"]
-    if has_mr: hdr_cols.append(f"{'MR':<8}")
-    hdr_cols.append(f"{'MRR (%)':<10}")
-    if has_mdr: hdr_cols.append(f"{'MDR':<8}")
-    if has_map: hdr_cols.append(f"{'MAP (%)':<10}")
-    hdr_cols.append(f"{'Top-5 (%)':<12}")
-    if has_top10: hdr_cols.append(f"{'Top-10 (%)':<12}")
-    hdr_cols.append(f"{'DTW':<10}")
-    if has_opt_params:
-        hdr_cols.append(f"{'Optimized Parameters (voicing, slope, energy)':<45}")
-    lines.append(" | ".join(hdr_cols))
+    header_line = f"{'Dataset':<15} | {'Method':<20} | {'Avg. LCS (%)':<12} | {'MRR (%)':<8} | {'Top-5 (%)':<10} | {'DTW':<8} | {'MAP (%)':<8} | {'MR':<6} | {'MDR':<5} | {'Top-10 (%)':<10} | {'Threshold':<10} | {'F1-Score':<9} | {'Precision (%)':<14} | {'Recall (%)':<11} | {'FPR (%)':<8} | {'FNR (%)':<8}"
+    lines.append(header_line)
     lines.append("-" * divider_len)
     
     for method in sorted_methods:
         row = method_rows[method]
         method_disp = method.upper()
         
-        def get_val(name, is_pct=False, fmt=".2f", default="-"):
+        def get_val(name, is_pct=False, fmt=".2f", default="N/A"):
             idx = header_indices.get(name.lower())
             if idx is not None and idx < len(row) and row[idx] != "":
                 try:
@@ -760,43 +781,29 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
             return default
 
         try:
-            lcs = get_val("lcs_promedio" if "lcs_promedio" in header_indices else "avg_lcs", is_pct=True) + "%"
-            mrr = get_val("mrr", is_pct=True) + "%"
-            top5 = get_val("top5_prec", is_pct=True) + "%"
-            dtw = get_val("dtw_promedio" if "dtw_promedio" in header_indices else "avg_dtw")
+            lcs_pct = get_val("avg_lcs", is_pct=True)
+            mrr_pct = get_val("mrr", is_pct=True)
+            top5_pct = get_val("top5_prec", is_pct=True)
+            dtw_val = get_val("avg_dtw", fmt=".2f")
+            map_pct = get_val("map", is_pct=True)
+            mr = get_val("mr")
+            mdr = get_val("mdr", fmt=".1f")
+            top10_pct = get_val("top10_prec" if "top10_prec" in header_indices else "top10", is_pct=True)
+            thresh = get_val("threshold", fmt=".4f")
+            f1 = get_val("f1_score", fmt=".4f")
+            prec_pct = get_val("precision", is_pct=True)
+            rec_pct = get_val("recall", is_pct=True)
+            fpr_pct = get_val("fpr", is_pct=True)
+            fnr_pct = get_val("fnr", is_pct=True)
             
-            row_cols = [f"{method_disp:<25}", f"{lcs:>12}"]
-            if has_mr:
-                mr = get_val("mr")
-                row_cols.append(f"{mr:>8}")
-            row_cols.append(f"{mrr:>8}")
-            if has_mdr:
-                mdr = get_val("mdr", fmt=".1f")
-                row_cols.append(f"{mdr:>8}")
-            if has_map:
-                map_val = get_val("map", is_pct=True) + "%"
-                row_cols.append(f"{map_val:>8}")
-            row_cols.append(f"{top5:>10}")
-            if has_top10:
-                top10 = get_val("top10_prec" if "top10_prec" in header_indices else "top10", is_pct=True) + "%"
-                row_cols.append(f"{top10:>10}")
-            row_cols.append(f"{dtw:>10}")
-            
-            if has_opt_params:
-                v_t = get_val("min_voicing_thresh", fmt=".4f")
-                s_e = get_val("slope_epsilon", fmt=".4f")
-                e_t = get_val("energy_tau", fmt=".4f")
-                if v_t != "-" and s_e != "-" and e_t != "-":
-                    params_str = f"voicing: {v_t}, slope: {s_e}, energy: {e_t}"
-                else:
-                    params_str = "N/A"
-                row_cols.append(f"{params_str:<45}")
-                
-            lines.append(" | ".join(row_cols))
+            row_str = (f"{dataset_name:<15} | {method_disp:<20} | {lcs_pct:<12} | {mrr_pct:<8} | {top5_pct:<10} | {dtw_val:<8} | "
+                       f"{map_pct:<8} | {mr:<6} | {mdr:<5} | {top10_pct:<10} | {thresh:<10} | {f1:<9} | {prec_pct:<14} | "
+                       f"{rec_pct:<11} | {fpr_pct:<8} | {fnr_pct:<8}")
+            lines.append(row_str)
         except Exception as e:
-            lines.append(f"{method.upper():<25} | Error formatting row: {e}")
+            lines.append(f"{dataset_name:<15} | {method_disp:<20} | Error formatting row: {e}")
             
-    lines.append("-" * divider_len)
+    lines.append("=" * divider_len)
     
     table_content = "\n".join(lines) + "\n"
     table_path = dataset_dir / "comparative_table.txt"
@@ -848,22 +855,10 @@ def main():
                         help="Compute DTW for all pairs (slow)")
     parser.add_argument("--clear_cache", action="store_true",
                         help="Delete existing cache for the selected method before starting")
-    parser.add_argument("--plots", type=str, default=None, choices=["y", "n"],
+    parser.add_argument("--plots", type=str, default="n", choices=["y", "n"],
                         help="Generate qualitative plots and diagrams (y/n)")
     args = parser.parse_args()
 
-    # Ask user if they want plots if not specified in CLI
-    if args.plots is None:
-        while True:
-            plots_choice = input("\nDo you want to generate qualitative plots and diagrams? (y/n): ").strip().lower()
-            if plots_choice in ['y', 'yes']:
-                args.plots = 'y'
-                break
-            elif plots_choice in ['n', 'no']:
-                args.plots = 'n'
-                break
-            else:
-                print("Error: Please enter 'y' or 'n'.")
     args.plots = (args.plots == 'y')
 
     base_dir = Path(__file__).parent.absolute()
@@ -941,6 +936,11 @@ def main():
         idx_map[curr_idx] = 'all_melody'
         curr_idx += 1
         
+        print("\n--- Special / Thesis Selection ---")
+        print(f"  {curr_idx:2d}. {'tesis':<20} [Métodos Selección Tesis (YIN, pYIN, Melodia, SPICE, CREPE, RMVPE, FCN-f0, Demucs+CREPE)]")
+        idx_map[curr_idx] = 'tesis'
+        curr_idx += 1
+
         print("\n--- Others / Specials ---")
         for m in other_methods:
             classification = METHOD_CLASSIFICATION.get(m, "")
@@ -1023,6 +1023,21 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
         print("No se encontraron pares válidos. Skipping...")
         return
 
+    # Expand methods list if special keywords are passed
+    expanded_methods = []
+    for m in methods:
+        if m == "all":
+            expanded_methods.extend(['pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0', 'melodia', 'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe', 'basic_pitch', 'tachibana', 'poliner', 'durrieu', 'ensemble'])
+        elif m == "all_f0":
+            expanded_methods.extend(['pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0'])
+        elif m == "all_melody":
+            expanded_methods.extend(['poliner', 'durrieu', 'tachibana', 'melodia', 'basic_pitch', 'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe', 'bs_roformer', 'demucs'])
+        elif m == "tesis":
+            expanded_methods.extend(['yin', 'pyin', 'melodia', 'spice', 'crepe', 'rmvpe', 'fcn_f0', 'demucs_crepe', 'demucs'])
+        else:
+            expanded_methods.append(m)
+    methods = list(dict.fromkeys(expanded_methods)) # unique
+
     print("Methods to evaluate:")
     for m in methods:
         classification = METHOD_CLASSIFICATION.get(m, "Unknown")
@@ -1036,14 +1051,14 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
         try:
             with open(summary_path, 'r') as f:
                 first_line = f.readline().strip()
-            if "mr" not in first_line or "mdr" not in first_line:
+            if "threshold" not in first_line or "fpr" not in first_line:
                 summary_path.unlink()
         except Exception:
             pass
 
     if not summary_path.exists():
         with open(summary_path, 'w') as f:
-            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw\n")
+            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw,threshold,f1_score,precision,recall,fpr,fnr\n")
 
     for method in methods:
         classification = METHOD_CLASSIFICATION.get(method, "Unknown")
@@ -1181,14 +1196,12 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
                         else:
                             f0_orig = np.nan_to_num(np.where(pitch_o > 0, 440.0 * np.power(2.0, (pitch_o - 69.0) / 12.0), 0))
                             try:
-                                # Downsample ONLY on extremely long songs (more than 15 minutes / 38760 frames)
-                                if len(f0_cover) > 38760:
-                                    ds_factor = len(f0_cover) // 1000
-                                    f0_cover_ds = f0_cover[::ds_factor]
-                                    f0_orig_ds = f0_orig[::ds_factor]
-                                else:
-                                    f0_cover_ds = f0_cover
-                                    f0_orig_ds = f0_orig
+                                # Downsample f0 trajectories to max 1500 frames for memory-efficient DTW (prevents OOM/SIGKILL)
+                                max_dtw_len = 1500
+                                step_c = max(1, len(f0_cover) // max_dtw_len)
+                                step_o = max(1, len(f0_orig) // max_dtw_len)
+                                f0_cover_ds = f0_cover[::step_c]
+                                f0_orig_ds = f0_orig[::step_o]
                                     
                                 D, wp = librosa.sequence.dtw(f0_cover_ds.reshape(1, -1), f0_orig_ds.reshape(1, -1))
                                 dtw_val = D[-1, -1] / len(wp)
@@ -1281,16 +1294,23 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
         
         print(f"[{method}] Results | LCS: {avg_lcs:.4f} | MR: {mr:.2f} | MRR: {mrr:.4f} | MDR: {mdr:.1f} | MAP: {map_val:.4f} | Top5: {top5_prec:.2%} | Top10: {top10_prec:.2%} | DTW: {avg_dtw:.4f}")
         
-        # Export to CSV summary
-        with open(summary_path, 'a') as f:
-            f.write(f"{method},{valid_count},{avg_lcs:.6f},{mr:.6f},{mrr:.6f},{mdr:.1f},{map_val:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f}\n")
-            
         # Evaluate binary classification and optimal thresholds
         best_thresh_lcs, best_metrics_lcs, curves_lcs = evaluate_binary_classification(pairwise_lcs, "LCS")
         best_thresh_lev, best_metrics_lev, curves_lev = evaluate_binary_classification(pairwise_lev, "Levenshtein")
         best_thresh_ph, best_metrics_ph, curves_ph = evaluate_binary_classification(pairwise_pitch_hist, "Pitch Histogram")
         best_thresh_dtw, best_metrics_dtw, curves_dtw = evaluate_binary_classification(pairwise_dtw, "DTW", lower_is_better=True)
-        
+
+        # Export to CSV summary (including optimal binary classification metrics based on LCS)
+        thresh_val = best_thresh_lcs if best_metrics_lcs else 0.0
+        f1_val = best_metrics_lcs['f1_score'] if best_metrics_lcs else 0.0
+        prec_val = best_metrics_lcs['precision'] if best_metrics_lcs else 0.0
+        rec_val = best_metrics_lcs['recall'] if best_metrics_lcs else 0.0
+        fpr_val = best_metrics_lcs['fpr'] if best_metrics_lcs else 0.0
+        fnr_val = best_metrics_lcs['fnr'] if best_metrics_lcs else 0.0
+
+        with open(summary_path, 'a') as f:
+            f.write(f"{method},{valid_count},{avg_lcs:.6f},{mr:.6f},{mrr:.6f},{mdr:.1f},{map_val:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f},{thresh_val:.6f},{f1_val:.6f},{prec_val:.6f},{rec_val:.6f},{fpr_val:.6f},{fnr_val:.6f}\n")
+            
         # Export all_comparisons.csv
         comp_csv_path = out_method_dir / "all_comparisons.csv"
         with open(comp_csv_path, 'w') as f:
@@ -1303,9 +1323,9 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
             if not curves: continue
             curve_csv_path = out_method_dir / f"threshold_analysis_{m_name}.csv"
             with open(curve_csv_path, 'w') as f:
-                f.write("threshold,tp,fp,fn,tn,precision,recall,f1_score,accuracy\n")
+                f.write("threshold,tp,fp,fn,tn,precision,recall,f1_score,accuracy,fpr,fnr\n")
                 for c in curves:
-                    f.write(f"{c['threshold']:.4f},{c['tp']},{c['fp']},{c['fn']},{c['tn']},{c['precision']:.6f},{c['recall']:.6f},{c['f1_score']:.6f},{c['accuracy']:.6f}\n")
+                    f.write(f"{c['threshold']:.4f},{c['tp']},{c['fp']},{c['fn']},{c['tn']},{c['precision']:.6f},{c['recall']:.6f},{c['f1_score']:.6f},{c['accuracy']:.6f},{c['fpr']:.6f},{c['fnr']:.6f}\n")
         
         # Export to Detailed TXT Report
         report_path = out_method_dir / "detailed_report.txt"
@@ -1491,6 +1511,8 @@ def run_mc_msa_execution(args, base_dir):
             'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
             'bs_roformer', 'demucs'
         ]
+    elif args.method == 'tesis':
+        methods = ['yin', 'pyin', 'melodia', 'spice', 'crepe', 'rmvpe', 'fcn_f0', 'demucs_crepe', 'demucs']
     else:
         methods = [args.method]
 

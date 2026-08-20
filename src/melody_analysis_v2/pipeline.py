@@ -34,21 +34,30 @@ class MelodyAnalysisResult:
     def to_dict(self) -> dict:
         """Serialize the analysis to a JSON-compatible dictionary."""
 
+        def safe_convert(val):
+            if isinstance(val, (np.bool_, bool)):
+                return bool(val)
+            if isinstance(val, (np.integer, int)):
+                return int(val)
+            if isinstance(val, (np.floating, float)):
+                return float(val)
+            return val
+
         return {
             "segments": [
                 {
-                    "start_time": ann.segment.start_time,
-                    "end_time": ann.segment.end_time,
-                    "label": ann.label,
-                    "confidence": ann.confidence,
-                    "descriptor": ann.descriptor,
+                    "start_time": safe_convert(ann.segment.start_time),
+                    "end_time": safe_convert(ann.segment.end_time),
+                    "label": str(ann.label),
+                    "confidence": safe_convert(ann.confidence),
+                    "descriptor": {k: safe_convert(v) for k, v in ann.descriptor.items()} if isinstance(ann.descriptor, dict) else str(ann.descriptor),
                 }
                 for ann in self.segments
             ],
-            "times": self.features.times.tolist(),
-            "pitch_midi": self.features.pitch_midi.tolist(),
-            "confidence": self.features.confidence.tolist(),
-            "energy": self.features.energy.tolist(),
+            "times": [safe_convert(x) for x in self.features.times],
+            "pitch_midi": [safe_convert(x) for x in self.features.pitch_midi],
+            "confidence": [safe_convert(x) for x in self.features.confidence],
+            "energy": [safe_convert(x) for x in self.features.energy],
         }
 
 
@@ -61,8 +70,8 @@ class MelodyAnalyzer:
         segmenter: Optional[MelodySegmenter] = None,
         classifier: Optional[MelodyClassifier] = None,
         extraction_method: str = "pyin",
-        hop_length: int = 512,
-        sample_rate: int = 22050,
+        hop_length: int = 441,
+        sample_rate: int = 44100,
     ) -> None:
         self.segmenter = segmenter or MelodySegmenter()
         self.classifier = classifier or MelodyClassifier()
@@ -113,16 +122,21 @@ class MelodyAnalyzer:
             label=label,
         )
         return self.analyze_features(
-            features, normalized_audio=audio, sample_rate=sample_rate
+            features, normalized_audio=None, sample_rate=sample_rate
         )
 
     def analyze_file(self, path: str, label_prefix: str = "") -> MelodyAnalysisResult:
         if librosa is None:
             raise ImportError("librosa is required to load audio files")
         from pathlib import Path
-        audio, sr = librosa.load(path, sr=self.sample_rate)
+        import gc
+        target_sr = 16000 if self.extraction_method in ["rmvpe", "crepe", "bs_roformer_rmvpe", "demucs_rmvpe"] else self.sample_rate
+        audio, sr = librosa.load(path, sr=target_sr)
         label = f"{label_prefix} {Path(path).name}".strip() if label_prefix else Path(path).name
-        return self.analyze_audio(audio, sr, label=label)
+        res = self.analyze_audio(audio, sr, label=label)
+        del audio
+        gc.collect()
+        return res
 
 
 def analyze_melody(path: str) -> MelodyAnalysisResult:

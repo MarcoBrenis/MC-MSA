@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import List
+from pathlib import Path
 
 import numpy as np
-from scipy.ndimage import gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import find_peaks
 
 from .features import MelodyFeatures
@@ -41,24 +42,22 @@ class MelodySegmenter:
         *,
         kernel_size: int = 2,
         peak_threshold: float = 0.2,
-        min_separation: int = 6,
+        min_separation: int = 10,
         use_self_similarity: bool = True,
         checkerboard_radius: int = 8,
-        ssm_weight: float = 0.6,
         max_ssm_frames: int = 3000,
+        filter_type: str = "gaussian",
     ) -> None:
         """Create a segmenter.
 
         Parameters
         ----------
         kernel_size:
-            Standard deviation of the Gaussian kernel applied to the novelty
-            curve.  Larger values produce smoother novelty profiles.
+            Standard deviation/window size of kernel applied to novelty curve.
         peak_threshold:
-            Minimum relative height (0-1) for peaks to be considered as
-            boundaries.
-        min_separation:
-            Minimum number of frames between boundaries.
+            Minimum relative height (0-1) for peaks to be considered boundaries.
+        filter_type:
+            Type of smoothing filter: 'gaussian', 'median', or 'hybrid'.
         """
 
         self.kernel_size = kernel_size
@@ -66,49 +65,70 @@ class MelodySegmenter:
         self.min_separation = min_separation
         self.use_self_similarity = use_self_similarity
         self.checkerboard_radius = checkerboard_radius
-        self.ssm_weight = ssm_weight
         self.max_ssm_frames = max_ssm_frames
+        self.filter_type = filter_type
         self.last_step = 1
 
     def compute_self_similarity(self, features: MelodyFeatures) -> np.ndarray:
         """Compute a cosine self-similarity matrix from pitch and energy."""
+        if getattr(features, '_sim_cache', None) is not None:
+            return features._sim_cache
 
-        stacked = np.vstack((features.pitch_midi, features.energy)).T
-        stacked = (stacked - np.mean(stacked, axis=0, keepdims=True)) / (
-            np.std(stacked, axis=0, keepdims=True) + 1e-6
-        )
+        stacked = np.vstack((features.pitch_midi, features.energy)).T.astype(np.float32)
+        mean = np.mean(stacked, axis=0, keepdims=True)
+        std = np.std(stacked, axis=0, keepdims=True) + 1e-40
+        stacked = (stacked - mean) / std
+        
         norms = np.linalg.norm(stacked, axis=1, keepdims=True)
-        normalized = stacked / np.maximum(norms, 1e-6)
+        normalized = stacked / np.maximum(norms, 1e-40)
 
-        sim = normalized @ normalized.T
+        sim = (normalized @ normalized.T).astype(np.float32)
         sim = (sim + 1.0) / 2.0
         np.fill_diagonal(sim, 1.0)
+        features._sim_cache = sim
         return sim
 
     def compute_checkerboard_novelty(self, sim: np.ndarray) -> np.ndarray:
-        """Compute novelty along the diagonal of the self-similarity matrix."""
+        """Compute novelty along the diagonal of the self-similarity matrix using 2D integral image."""
 
         r = self.checkerboard_radius
         n = sim.shape[0]
         if n == 0 or n < 2 * r:
             return np.zeros(n, dtype=float)
 
-        kernel = np.block(
-            [
-                [np.ones((r, r)), -np.ones((r, r))],
-                [-np.ones((r, r)), np.ones((r, r))],
-            ]
-        )
+        # 2D Integral Image (Summed-Area Table) with 0-padding at top and left
+        sat = np.pad(np.cumsum(np.cumsum(sim, axis=0), axis=1), ((1, 0), (1, 0)))
+
+        i = np.arange(r, n - r)
+
+        # Quadrant sums for all frames i simultaneously
+        tl = sat[i, i] - sat[i - r, i] - sat[i, i - r] + sat[i - r, i - r]
+        tr = sat[i, i + r] - sat[i - r, i + r] - sat[i, i] + sat[i - r, i]
+        bl = sat[i + r, i] - sat[i, i] - sat[i + r, i - r] + sat[i, i - r]
+        br = sat[i + r, i + r] - sat[i, i + r] - sat[i + r, i] + sat[i, i]
 
         novelty = np.zeros(n, dtype=float)
-        for i in range(r, n - r):
-            sub = sim[i - r : i + r, i - r : i + r]
-            novelty[i] = float(np.sum(sub * kernel))
+        novelty[r : n - r] = (tl - tr - bl + br).astype(float)
 
         novelty = np.maximum(novelty, 0.0)
-        if np.max(novelty) > 0:
-            novelty = novelty / np.max(novelty)
-        novelty = gaussian_filter1d(novelty, sigma=self.kernel_size)
+        max_val = np.max(novelty)
+        if max_val > 0:
+            novelty = novelty / max_val
+
+        # Apply smooth filtering: gaussian, median, or hybrid (median + gaussian)
+        filter_type = getattr(self, 'filter_type', 'gaussian')
+        kernel_sz = int(self.kernel_size)
+        if kernel_sz % 2 == 0:
+            kernel_sz += 1  # Median filter requires odd kernel size
+
+        if filter_type == 'median':
+            novelty = median_filter(novelty, size=kernel_sz)
+        elif filter_type == 'hybrid':
+            novelty = median_filter(novelty, size=kernel_sz)
+            novelty = gaussian_filter1d(novelty, sigma=self.kernel_size)
+        else:  # default gaussian
+            novelty = gaussian_filter1d(novelty, sigma=self.kernel_size)
+
         return novelty
 
     def compute_novelty(
@@ -137,7 +157,7 @@ class MelodySegmenter:
         if np.max(energy_diff) > 0:
             energy_diff = energy_diff / np.max(energy_diff)
 
-        base_novelty = 0.7 * pitch_diff + 0.3 * energy_diff
+        base_novelty = pitch_diff + energy_diff
         base_novelty = gaussian_filter1d(base_novelty, sigma=self.kernel_size)
 
         if not self.use_self_similarity:

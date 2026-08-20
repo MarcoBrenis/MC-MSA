@@ -57,7 +57,7 @@ def extract_melody_features(
     audio: np.ndarray,
     sample_rate: int,
     *,
-    hop_length: int = 512,
+    hop_length: int = 441,
     fmin: float = 65.0,
     fmax: float = 1000.0,
     frame_length: int = 2048,

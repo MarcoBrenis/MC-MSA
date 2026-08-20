@@ -301,10 +301,10 @@ def main():
                 result.features.pitch_midi,
                 result.features.confidence,
                 result.features.energy,
-                sample_rate=22050
+                sample_rate=44100
             )
             synth_path = out_dir / f"{audio_path.stem}_synthesized.wav"
-            sf.write(str(synth_path), synth_audio, 22050)
+            sf.write(str(synth_path), synth_audio, 44100)
             print(f"  - Synthesized melody audio: {synth_path}")
         except Exception as e:
             print(f"  - Could not synthesize melody: {e}")

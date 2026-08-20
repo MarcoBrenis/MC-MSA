@@ -8,7 +8,7 @@ def synthesize_melody(
     pitch_midi: np.ndarray,
     confidence: np.ndarray,
     energy: np.ndarray,
-    sample_rate: int = 22050,
+    sample_rate: int = 44100,
     confidence_threshold: float = 0.2,
 ) -> np.ndarray:
     """

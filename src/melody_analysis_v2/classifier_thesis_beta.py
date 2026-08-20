@@ -19,10 +19,12 @@ class MelodyClassifierThesisBeta:
         self,
         *,
         min_voicing_thresh: float = 0.0,
+        tail_proportion: float = 0.20,
         slope_epsilon: float = 0.15,
-        energy_tau: float = 0.3,
+        energy_tau: float = 0.30,
     ) -> None:
         self.min_voicing_thresh = min_voicing_thresh
+        self.tail_proportion = tail_proportion
         self.slope_epsilon = slope_epsilon
         self.energy_tau = energy_tau
 
@@ -57,13 +59,14 @@ class MelodyClassifierThesisBeta:
             # 1. Class 'X' (Noise/Silence) based on voicing threshold
             mean_voicing = float(np.mean(voicing)) if voicing.size > 0 else 0.0
             
-            if mean_voicing < self.min_voicing_thresh:
+            if mean_voicing <= self.min_voicing_thresh:
                 label = "Silence" # Maps to state X
                 confidence = 1.0 - mean_voicing
                 descriptor = {"mean_voicing": mean_voicing, "reason": "Low voicing"}
             else:
-                # Analyze the last 20% of the segment (tail)
-                tail_len = max(1, int(len(pitch) * 0.2))
+                # Analyze the last p% of the segment (tail)
+                p = max(0.01, min(1.0, self.tail_proportion))
+                tail_len = max(1, int(len(pitch) * p))
                 tail_idx = slice(-tail_len, None)
                 
                 tail_pitch = pitch[tail_idx]
@@ -77,24 +80,19 @@ class MelodyClassifierThesisBeta:
                 else:
                     slope = 0.0
                 
-                # Corrected logic for A vs C matching the thesis manuscript:
-                # - A (Antecedent): slope > slope_epsilon OR tail_energy > energy_tau
-                # - C (Consequent): slope < -slope_epsilon AND tail_energy < (energy_tau / 2.0)
-                # - Fallback: If neither condition is met, use sign of the slope.
+                # Exact Algorithm 1 Antecedent-Consequent logic:
+                # - Consequent (C): slope <= slope_epsilon AND tail_energy <= energy_tau
+                # - Antecedent (A): slope > slope_epsilon OR tail_energy > energy_tau
                 
-                if slope > self.slope_epsilon or tail_energy > self.energy_tau:
-                    label = "Antecedent"
-                    descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
-                elif slope < -self.slope_epsilon and tail_energy < (self.energy_tau / 2.0):
+                if slope <= self.slope_epsilon and tail_energy <= self.energy_tau:
                     label = "Consequent"
                     descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
+                elif slope > self.slope_epsilon or tail_energy > self.energy_tau:
+                    label = "Antecedent"
+                    descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
                 else:
-                    # Fallback/Ambiguous cases
-                    if slope < 0:
-                        label = "Consequent"
-                    else:
-                        label = "Antecedent"
-                    descriptor = {"f0_slope": slope, "energy_tail": tail_energy, "fallback": True}
+                    label = "Silence"
+                    descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
                 
                 confidence = 0.8 # Fixed confidence for logic-based labels
 

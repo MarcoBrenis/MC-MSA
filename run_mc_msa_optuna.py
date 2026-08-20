@@ -93,7 +93,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
 
     if not summary_path.exists():
         with open(summary_path, 'w') as f:
-            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw,min_voicing_thresh,slope_epsilon,energy_tau\n")
+            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw,checkerboard_radius,kernel_size,peak_threshold,tail_proportion,slope_epsilon,energy_tau,min_voicing_thresh\n")
 
     for method in methods:
         classification = METHOD_CLASSIFICATION.get(method, "Unknown")
@@ -183,26 +183,37 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
         study = optuna.create_study(direction="maximize")
         
         def objective(trial):
-            min_voicing_thresh = trial.suggest_float('min_voicing_thresh', 0.0, 0.8)
-            slope_epsilon = trial.suggest_float('slope_epsilon', 0.0, 0.5)
-            energy_tau = trial.suggest_float('energy_tau', 0.01, 0.9)
+            checkerboard_radius = trial.suggest_int('checkerboard_radius', 4, 16, step=2)
+            kernel_size = trial.suggest_int('kernel_size', 1, 5, step=1)
+            peak_threshold = trial.suggest_float('peak_threshold', 0.05, 0.50, step=0.05)
             
+            tail_proportion = trial.suggest_float('tail_proportion', 0.05, 0.50, step=0.05)
+            slope_epsilon = trial.suggest_float('slope_epsilon', 0.0, 0.5, step=0.05)
+            energy_tau = trial.suggest_float('energy_tau', 0.05, 0.80, step=0.05)
+            
+            segmenter = MelodySegmenter(
+                checkerboard_radius=checkerboard_radius,
+                kernel_size=kernel_size,
+                peak_threshold=peak_threshold
+            )
             clf = MelodyClassifierThesis(
-                min_voicing_thresh=min_voicing_thresh,
                 slope_epsilon=slope_epsilon,
-                energy_tau=energy_tau
+                energy_tau=energy_tau,
+                tail_proportion=tail_proportion
             )
             
             seq_originals = {}
             for uid, data in optuna_originals.items():
                 if data is None: continue
-                annotations = clf.classify(data['features'], data['segments'])
+                segs = segmenter.segment(data['features'])
+                annotations = clf.classify(data['features'], segs)
                 seq_originals[uid] = [ann.label for ann in annotations]
                 
             seq_covers = {}
             for uid, data in optuna_covers.items():
                 if data is None: continue
-                annotations = clf.classify(data['features'], data['segments'])
+                segs = segmenter.segment(data['features'])
+                annotations = clf.classify(data['features'], segs)
                 seq_covers[uid] = [ann.label for ann in annotations]
                 
             if args.optuna_metric == 'mrr':
@@ -248,21 +259,29 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
             print(f"   - {k}: {v:.6f}")
         print("*"*60 + "\n")
         
-        # Instantiate the optimized classifier
+        # Instantiate the optimized segmenter and classifier
+        best_segmenter = MelodySegmenter(
+            checkerboard_radius=best_params['checkerboard_radius'],
+            kernel_size=best_params['kernel_size'],
+            peak_threshold=best_params['peak_threshold']
+        )
         best_clf = MelodyClassifierThesis(
             min_voicing_thresh=best_params['min_voicing_thresh'],
             slope_epsilon=best_params['slope_epsilon'],
-            energy_tau=best_params['energy_tau']
+            energy_tau=best_params['energy_tau'],
+            tail_proportion=best_params['tail_proportion']
         )
         
-        # Re-classify results in memory for final evaluation
+        # Re-segment and re-classify results in memory for final evaluation
         for uid in common_ids:
             if res_originals[uid] is not None and optuna_originals[uid] is not None:
-                ann_orig = best_clf.classify(optuna_originals[uid]['features'], optuna_originals[uid]['segments'])
+                segs = best_segmenter.segment(optuna_originals[uid]['features'])
+                ann_orig = best_clf.classify(optuna_originals[uid]['features'], segs)
                 res_originals[uid]['seq'] = [ann.label for ann in ann_orig]
                 
             if res_covers[uid] is not None and optuna_covers[uid] is not None:
-                ann_cover = best_clf.classify(optuna_covers[uid]['features'], optuna_covers[uid]['segments'])
+                segs = best_segmenter.segment(optuna_covers[uid]['features'])
+                ann_cover = best_clf.classify(optuna_covers[uid]['features'], segs)
                 res_covers[uid]['seq'] = [ann.label for ann in ann_cover]
 
         # Free optuna memory before evaluating
@@ -461,7 +480,7 @@ def run_single_dataset_optuna_mc_msa(dataset_dir: Path, methods: list, args, bas
         
         # Export to summary CSV
         with open(summary_path, 'a') as f:
-            f.write(f"{method}_optuna,{valid_count},{avg_lcs:.6f},{mr:.6f},{mrr:.6f},{mdr:.1f},{map_val:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f},{best_params['min_voicing_thresh']:.6f},{best_params['slope_epsilon']:.6f},{best_params['energy_tau']:.6f}\n")
+            f.write(f"{method}_optuna,{valid_count},{avg_lcs:.6f},{mr:.6f},{mrr:.6f},{mdr:.1f},{map_val:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f},{best_params['checkerboard_radius']},{best_params['kernel_size']},{best_params['peak_threshold']:.4f},{best_params['tail_proportion']:.4f},{best_params['slope_epsilon']:.4f},{best_params['energy_tau']:.4f},{best_params['min_voicing_thresh']:.4f}\n")
             
         # Evaluate binary classification and optimal thresholds
         best_thresh_lcs, best_metrics_lcs, curves_lcs = evaluate_binary_classification(pairwise_lcs, "LCS")
@@ -671,16 +690,13 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     lines.append("-" * divider_len)
     
     # Header line
-    hdr_cols = [f"{'Method':<25}", f"{'Avg. LCS (%)':<14}"]
-    if has_mr: hdr_cols.append(f"{'MR':<8}")
-    hdr_cols.append(f"{'MRR (%)':<10}")
-    if has_mdr: hdr_cols.append(f"{'MDR':<8}")
+    hdr_cols = [f"{'Method':<20}", f"{'Avg. LCS (%)':<14}", f"{'MRR (%)':<10}", f"{'Top-5 (%)':<10}", f"{'DTW':<10}"]
     if has_map: hdr_cols.append(f"{'MAP (%)':<10}")
-    hdr_cols.append(f"{'Top-5 (%)':<12}")
-    if has_top10: hdr_cols.append(f"{'Top-10 (%)':<12}")
-    hdr_cols.append(f"{'DTW':<10}")
+    if has_mr: hdr_cols.append(f"{'MR':<8}")
+    if has_mdr: hdr_cols.append(f"{'MDR':<8}")
+    if has_top10: hdr_cols.append(f"{'Top-10 (%)':<10}")
     if has_opt_params:
-        hdr_cols.append(f"{'Optimized Parameters (voicing, slope, energy)':<45}")
+        hdr_cols.append(f"{'Optimized Parameters (L, σ, τ_pk, L_tail, ε_slp, τ_E)':<55}")
     lines.append(" | ".join(hdr_cols))
     lines.append("-" * divider_len)
     
@@ -706,36 +722,36 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
             top5 = get_val("top5_prec", is_pct=True) + "%"
             dtw = get_val("avg_dtw" if "avg_dtw" in header_indices else "dtw_promedio")
             
-            row_cols = [f"{method_disp:<25}", f"{lcs:>12}"]
+            row_cols = [f"{method_disp:<20}", f"{lcs:>14}", f"{mrr:>10}", f"{top5:>10}", f"{dtw:>10}"]
+            if has_map:
+                map_val = get_val("map", is_pct=True) + "%"
+                row_cols.append(f"{map_val:>10}")
             if has_mr:
                 mr = get_val("mr")
                 row_cols.append(f"{mr:>8}")
-            row_cols.append(f"{mrr:>8}")
             if has_mdr:
                 mdr = get_val("mdr", fmt=".1f")
                 row_cols.append(f"{mdr:>8}")
-            if has_map:
-                map_val = get_val("map", is_pct=True) + "%"
-                row_cols.append(f"{map_val:>8}")
-            row_cols.append(f"{top5:>10}")
             if has_top10:
                 top10 = get_val("top10_prec" if "top10_prec" in header_indices else "top10", is_pct=True) + "%"
                 row_cols.append(f"{top10:>10}")
-            row_cols.append(f"{dtw:>10}")
             
             if has_opt_params:
-                v_t = get_val("min_voicing_thresh", fmt=".4f")
-                s_e = get_val("slope_epsilon", fmt=".4f")
-                e_t = get_val("energy_tau", fmt=".4f")
-                if v_t != "-" and s_e != "-" and e_t != "-":
-                    params_str = f"voicing: {v_t}, slope: {s_e}, energy: {e_t}"
+                rad = get_val("checkerboard_radius", fmt="d")
+                ker = get_val("kernel_size", fmt="d")
+                pk = get_val("peak_threshold", fmt=".2f")
+                tl = get_val("tail_proportion", fmt=".2f")
+                s_e = get_val("slope_epsilon", fmt=".2f")
+                e_t = get_val("energy_tau", fmt=".2f")
+                if rad != "-" and pk != "-":
+                    params_str = f"L:{rad}, σ:{ker}, τ_pk:{pk}, L_tail:{tl}, ε_slp:{s_e}, τ_E:{e_t}"
                 else:
                     params_str = "N/A"
-                row_cols.append(f"{params_str:<45}")
+                row_cols.append(f"{params_str:<55}")
                 
             lines.append(" | ".join(row_cols))
         except Exception as e:
-            lines.append(f"{method.upper():<25} | Error formatting row: {e}")
+            lines.append(f"{method.upper():<20} | Error formatting row: {e}")
             
     lines.append("-" * divider_len)
     
@@ -750,7 +766,7 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
 
 def main():
     available_methods = [
-        'all', 'all_f0', 'all_melody',
+        'tesis', 'all', 'all_f0', 'all_melody',
         'pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0',
         'melodia', 'tachibana', 'poliner', 'durrieu', 'basic_pitch',
         'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
@@ -782,22 +798,9 @@ def main():
     parser.add_argument("--optuna_metric", type=str, default="mrr",
                         choices=["mrr", "lcs"],
                         help="Metric to maximize with Optuna (mrr or lcs)")
-    parser.add_argument("--plots", type=str, default=None, choices=["y", "n"],
+    parser.add_argument("--plots", type=str, default="n", choices=["y", "n"],
                         help="Generate qualitative plots and diagrams (y/n)")
     args = parser.parse_args()
-
-    # Ask user if they want plots if not specified in CLI
-    if args.plots is None:
-        while True:
-            plots_choice = input("\nDo you want to generate qualitative plots and diagrams? (y/n): ").strip().lower()
-            if plots_choice in ['y', 'yes']:
-                args.plots = 'y'
-                break
-            elif plots_choice in ['n', 'no']:
-                args.plots = 'n'
-                break
-            else:
-                print("Error: Please enter 'y' or 'n'.")
     args.plots = (args.plots == 'y')
 
     base_dir = Path(__file__).parent.absolute()
@@ -875,11 +878,9 @@ def main():
         curr_idx += 1
         
         print("\n--- Others / Specials ---")
-        for m in other_methods:
-            classification = METHOD_CLASSIFICATION.get(m, "")
-            print(f"  {curr_idx:2d}. {m:<20} [{classification}]")
-            idx_map[curr_idx] = m
-            curr_idx += 1
+        print(f"  {curr_idx:2d}. {'tesis':<20} [Tesis methods: YIN, pYIN, Melodia, SPICE, CREPE, RMVPE, FCN-f0, Demucs]")
+        idx_map[curr_idx] = 'tesis'
+        curr_idx += 1
         print(f"  {curr_idx:2d}. {'all':<20} [All methods]")
         idx_map[curr_idx] = 'all'
         
@@ -926,7 +927,9 @@ def main():
     if not cache_dir.is_absolute():
         cache_dir = base_dir / cache_dir
 
-    if args.method == 'all':
+    if args.method == 'tesis':
+        methods = ['yin', 'pyin', 'melodia', 'spice', 'crepe', 'rmvpe', 'fcn_f0', 'demucs_crepe', 'demucs']
+    elif args.method == 'all':
         methods = [
             'pyin', 'yin', 'crepe', 'ensemble', 'rmvpe', 'spice', 'fcn_f0',
             'melodia', 'tachibana', 'poliner', 'durrieu', 'basic_pitch',
