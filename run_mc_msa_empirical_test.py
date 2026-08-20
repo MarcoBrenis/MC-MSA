@@ -48,7 +48,7 @@ from src.melody_analysis_v2.segmenter import MelodySegmenter, MelodySegment
 from src.melody_analysis_v2.features import MelodyFeatures
 
 
-# Default Hyperparameter Ranges for Empirical Grid Search (Single Source of Truth)
+# Default Hyperparameter Search Ranges for Empirical Grid Search (Single Source of Truth)
 DEFAULT_RADII = [4, 6, 8, 10, 12]                         # L: 2D Gaussian kernel radius
 DEFAULT_KERNEL_SIZES = [2, 3, 4, 5, 6]                    # σ: 1D Gaussian smoothing
 DEFAULT_PEAK_THRESHOLDS = [0.10, 0.15, 0.20, 0.25, 0.30]  # τ_peak: Peak threshold

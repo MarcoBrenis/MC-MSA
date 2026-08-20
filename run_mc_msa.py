@@ -12,6 +12,15 @@ import librosa
 import matplotlib.pyplot as plt
 
 from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierThesis, MelodyFeatures, MelodySegmentAnnotation, DiagramExporter
+
+# Default Baseline Hyperparameters for Single Execution (Single Source of Truth)
+DEFAULT_CHECKERBOARD_RADIUS = 8    # L: 2D Gaussian kernel radius
+DEFAULT_KERNEL_SIZE = 2           # σ: 1D Gaussian smoothing standard deviation
+DEFAULT_PEAK_THRESHOLD = 0.20     # τ_peak: Peak threshold for novelty curve
+DEFAULT_MIN_SEPARATION = 10       # d_min: Minimum boundary separation
+DEFAULT_TAIL_PROPORTION = 0.20    # L_tail (p): Tail proportion for classification
+DEFAULT_SLOPE_EPSILON = 0.15      # ε_slope: F0 slope threshold
+DEFAULT_ENERGY_TAU = 0.30         # τ_E: Energy threshold for cadence resolution
 from src.melody_analysis_v2.classifier_thesis import calculate_lcs
 from src.melody_analysis_v2.segmenter import MelodySegment
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
@@ -20,6 +29,15 @@ from src.melody_analysis_v2.visualization import (
     plot_self_similarity, 
     plot_spectrogram_with_segments
 )
+
+# Baseline Single-Value Hyperparameters for Standard MC-MSA Execution (Single Source of Truth)
+DEFAULT_RADIUS = 8                # L: 2D Gaussian kernel radius
+DEFAULT_KERNEL_SIZE = 2           # σ: 1D Gaussian smoothing standard deviation
+DEFAULT_PEAK_THRESHOLD = 0.20     # τ_peak: Peak threshold for novelty curve
+DEFAULT_MIN_SEPARATION = 10       # d_min: Minimum boundary separation
+DEFAULT_TAIL_PROPORTION = 0.20    # L_tail (p): Tail proportion for classification
+DEFAULT_SLOPE_EPSILON = 0.15      # ε_slope: F0 slope threshold
+DEFAULT_ENERGY_TAU = 0.30         # τ_E: Energy threshold for cadence resolution
 
 METHOD_CLASSIFICATION = {
     'pyin': 'Fundamental Frequency (F0 Extractor)',
