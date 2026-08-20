@@ -831,10 +831,20 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
     except Exception as e:
         print(f"Error writing comparative table: {e}")
 
-    # Generate specialized Academic Paper / Thesis Format Table (Exact Match to LaTeX Header)
-    academic_lines = []
-    academic_lines.append(f"{'Dataset':<15} | {'Method':<20} | {'MRR (%)':<10} | {'MAP (%)':<10} | {'MR':<8} | {'MDR':<8} | {'Top-5 (%)':<10} | {'Top-10 (%)':<10}")
-    academic_lines.append("-" * 105)
+    # Generate Ranking Table (Exact Match to Image 1)
+    ranking_lines = []
+    ranking_lines.append(f"{'Dataset':<15} | {'Method':<20} | {'MRR (%)':<10} | {'MAP (%)':<10} | {'MR':<8} | {'MDR':<8} | {'Top-5 (%)':<10} | {'Top-10 (%)':<10}")
+    ranking_lines.append("-" * 105)
+
+    # Generate Binary Classification Table (Exact Match to Image 2)
+    binary_lines = []
+    binary_lines.append(f"{'Dataset':<15} | {'Method':<20} | {'Threshold':<11} | {'F1-Score':<10} | {'Precision (%)':<14} | {'Recall (%)':<12} | {'FPR (%)':<9} | {'FNR (%)':<9}")
+    binary_lines.append("-" * 110)
+
+    # Generate Confusion Matrices Table
+    cm_lines = []
+    cm_lines.append(f"{'Dataset':<15} | {'Method':<20} | {'Threshold':<11} | {'TP':<8} | {'FP':<8} | {'FN':<8} | {'TN':<8} | {'Accuracy (%)':<13}")
+    cm_lines.append("-" * 105)
 
     for method in sorted_methods:
         row = method_rows[method]
@@ -860,20 +870,56 @@ def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
             top5_pct = get_val("top5_prec", is_pct=True)
             top10_pct = get_val("top10_prec" if "top10_prec" in header_indices else "top10", is_pct=True)
             
-            row_str = f"{dataset_name:<15} | {method_disp:<20} | {mrr_pct:<10} | {map_pct:<10} | {mr:<8} | {mdr:<8} | {top5_pct:<10} | {top10_pct:<10}"
-            academic_lines.append(row_str)
+            row_ranking = f"{dataset_name:<15} | {method_disp:<20} | {mrr_pct:<10} | {map_pct:<10} | {mr:<8} | {mdr:<8} | {top5_pct:<10} | {top10_pct:<10}"
+            ranking_lines.append(row_ranking)
         except Exception:
             pass
 
-    academic_content = "\n".join(academic_lines) + "\n"
-    academic_path = dataset_dir / "academic_summary_table.txt"
+        try:
+            thresh = get_val("threshold", fmt=".4f")
+            f1 = get_val("f1_score", fmt=".4f")
+            prec_pct = get_val("precision", is_pct=True)
+            rec_pct = get_val("recall", is_pct=True)
+            fpr_pct = get_val("fpr", is_pct=True)
+            fnr_pct = get_val("fnr", is_pct=True)
+
+            row_binary = f"{dataset_name:<15} | {method_disp:<20} | {thresh:<11} | {f1:<10} | {prec_pct:<14} | {rec_pct:<12} | {fpr_pct:<9} | {fnr_pct:<9}"
+            binary_lines.append(row_binary)
+        except Exception:
+            pass
+
+        try:
+            thresh = get_val("threshold", fmt=".4f")
+            tp = get_val("tp", fmt="d")
+            fp = get_val("fp", fmt="d")
+            fn = get_val("fn", fmt="d")
+            tn = get_val("tn", fmt="d")
+            acc_pct = get_val("accuracy", is_pct=True)
+
+            row_cm = f"{dataset_name:<15} | {method_disp:<20} | {thresh:<11} | {tp:<8} | {fp:<8} | {fn:<8} | {tn:<8} | {acc_pct:<13}"
+            cm_lines.append(row_cm)
+        except Exception:
+            pass
+
+    ranking_content = "\n".join(ranking_lines) + "\n"
+    binary_content = "\n".join(binary_lines) + "\n"
+    cm_content = "\n".join(cm_lines) + "\n"
+
     try:
-        academic_path.write_text(academic_content, encoding='utf-8')
-        print(f"[Academic Table] Successfully saved at {academic_path}")
-        print("\n=== TABLA FORMATO ACADÉMICO / TESIS ===")
-        print(academic_content)
+        (dataset_dir / "academic_summary_table.txt").write_text(ranking_content, encoding='utf-8')
+        (dataset_dir / "academic_binary_table.txt").write_text(binary_content, encoding='utf-8')
+        (dataset_dir / "confusion_matrices_table.txt").write_text(cm_content, encoding='utf-8')
+
+        print("\n=== TABLA 1: RANKING Y COBERTURA (RANKING METRICS) ===")
+        print(ranking_content)
+
+        print("=== TABLA 2: CLASIFICACIÓN BINARIA (BINARY METRICS) ===")
+        print(binary_content)
+
+        print("=== MATRICES DE CONFUSIÓN (CONFUSION MATRICES) ===")
+        print(cm_content)
     except Exception as e:
-        print(f"Error writing academic table: {e}")
+        print(f"Error writing academic tables: {e}")
 
 
 def find_available_datasets(directory: Path):
@@ -1120,7 +1166,7 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
 
     if not summary_path.exists():
         with open(summary_path, 'w') as f:
-            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw,threshold,f1_score,precision,recall,fpr,fnr\n")
+            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw,threshold,f1_score,precision,recall,fpr,fnr,tp,fp,fn,tn,accuracy\n")
 
     for method in methods:
         classification = METHOD_CLASSIFICATION.get(method, "Unknown")
@@ -1364,14 +1410,19 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
 
         # Export to CSV summary (including optimal binary classification metrics based on LCS)
         thresh_val = best_thresh_lcs if best_metrics_lcs else 0.0
-        f1_val = best_metrics_lcs['f1_score'] if best_metrics_lcs else 0.0
-        prec_val = best_metrics_lcs['precision'] if best_metrics_lcs else 0.0
-        rec_val = best_metrics_lcs['recall'] if best_metrics_lcs else 0.0
-        fpr_val = best_metrics_lcs['fpr'] if best_metrics_lcs else 0.0
-        fnr_val = best_metrics_lcs['fnr'] if best_metrics_lcs else 0.0
+        f1_val = best_metrics_lcs.get('f1_score', 0.0) if best_metrics_lcs else 0.0
+        prec_val = best_metrics_lcs.get('precision', 0.0) if best_metrics_lcs else 0.0
+        rec_val = best_metrics_lcs.get('recall', 0.0) if best_metrics_lcs else 0.0
+        fpr_val = best_metrics_lcs.get('fpr', 0.0) if best_metrics_lcs else 0.0
+        fnr_val = best_metrics_lcs.get('fnr', 0.0) if best_metrics_lcs else 0.0
+        tp_val = best_metrics_lcs.get('tp', 0) if best_metrics_lcs else 0
+        fp_val = best_metrics_lcs.get('fp', 0) if best_metrics_lcs else 0
+        fn_val = best_metrics_lcs.get('fn', 0) if best_metrics_lcs else 0
+        tn_val = best_metrics_lcs.get('tn', 0) if best_metrics_lcs else 0
+        acc_val = best_metrics_lcs.get('accuracy', 0.0) if best_metrics_lcs else 0.0
 
         with open(summary_path, 'a') as f:
-            f.write(f"{method},{valid_count},{avg_lcs:.6f},{mr:.6f},{mrr:.6f},{mdr:.1f},{map_val:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f},{thresh_val:.6f},{f1_val:.6f},{prec_val:.6f},{rec_val:.6f},{fpr_val:.6f},{fnr_val:.6f}\n")
+            f.write(f"{method},{valid_count},{avg_lcs:.6f},{mr:.6f},{mrr:.6f},{mdr:.1f},{map_val:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f},{thresh_val:.6f},{f1_val:.6f},{prec_val:.6f},{rec_val:.6f},{fpr_val:.6f},{fnr_val:.6f},{tp_val},{fp_val},{fn_val},{tn_val},{acc_val:.6f}\n")
             
         # Export all_comparisons.csv
         comp_csv_path = out_method_dir / "all_comparisons.csv"

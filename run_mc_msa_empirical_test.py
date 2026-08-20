@@ -473,12 +473,13 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
                 anns_c = clf.classify(cover_features[uid], segs_cover_cache[(r, k, pk)][uid])
                 seq_cover_dict[uid] = [a.label for a in anns_c]
 
-            # Perform N x N cover retrieval evaluation
+            # Perform N x N cover retrieval evaluation and binary classification
             lcs_sims = []
             ranks = []
             mrrs = []
             top5_hits = []
             top10_hits = []
+            pairwise_lcs = []
 
             for uid_cover in valid_uids:
                 sims = []
@@ -488,6 +489,8 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
                 for uid_orig in valid_uids:
                     orig_seq = seq_orig_dict[uid_orig]
                     sim = calculate_lcs(orig_seq, cover_seq)
+                    is_correct = (uid_orig == uid_cover)
+                    pairwise_lcs.append((sim, is_correct))
                     sims.append((sim, uid_orig))
                     sim_dict[uid_orig] = sim
 
@@ -517,6 +520,9 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
             avg_top5 = float(np.mean(top5_hits)) if top5_hits else 0.0
             avg_top10 = float(np.mean(top10_hits)) if top10_hits else 0.0
 
+            # Evaluate optimal binary classification threshold & confusion matrix for this hyperparameter combo
+            best_thresh, best_metrics, _ = evaluate_binary_classification(pairwise_lcs, "LCS")
+
             combo_metrics[combo] = {
                 "lcs": avg_lcs,
                 "mr": avg_mr,
@@ -524,11 +530,22 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
                 "mdr": avg_mdr,
                 "map": avg_map,
                 "top5": avg_top5,
-                "top10": avg_top10
+                "top10": avg_top10,
+                "thresh": best_thresh,
+                "f1": best_metrics.get("f1_score", 0.0) if best_metrics else 0.0,
+                "precision": best_metrics.get("precision", 0.0) if best_metrics else 0.0,
+                "recall": best_metrics.get("recall", 0.0) if best_metrics else 0.0,
+                "fpr": best_metrics.get("fpr", 0.0) if best_metrics else 0.0,
+                "fnr": best_metrics.get("fnr", 0.0) if best_metrics else 0.0,
+                "tp": best_metrics.get("tp", 0) if best_metrics else 0,
+                "fp": best_metrics.get("fp", 0) if best_metrics else 0,
+                "fn": best_metrics.get("fn", 0) if best_metrics else 0,
+                "tn": best_metrics.get("tn", 0) if best_metrics else 0,
+                "accuracy": best_metrics.get("accuracy", 0.0) if best_metrics else 0.0
             }
 
             if combo_idx % 10 == 0 or combo_idx == len(grid_combinations):
-                print(f"    Evaluated {combo_idx}/{len(grid_combinations)} combinations -> Latest (L={r}, σ={k}, τ_pk={pk:.2f}): MRR={avg_mrr*100:.2f}%, MAP={avg_map*100:.2f}%, MR={avg_mr:.2f}, MDR={avg_mdr:.1f}, Top-5={avg_top5*100:.2f}%, Top-10={avg_top10*100:.2f}%")
+                print(f"    Evaluated {combo_idx}/{len(grid_combinations)} combinations -> Latest (L={r}, σ={k}, τ_pk={pk:.2f}): MRR={avg_mrr*100:.2f}%, MAP={avg_map*100:.2f}%, MR={avg_mr:.2f}, MDR={avg_mdr:.1f}, Top-5={avg_top5*100:.2f}%, Top-10={avg_top10*100:.2f}% | F1={combo_metrics[combo]['f1']:.4f}")
 
         # Write Phase 2 results into organized CSV files
         all_combos_results = []
@@ -537,7 +554,7 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
         detailed_csv_path.parent.mkdir(parents=True, exist_ok=True)
         
         with open(detailed_csv_path, 'w', encoding='utf-8') as f_det:
-            f_det.write("combo_id,method,dataset,pairs,checkerboard_radius_L,kernel_sigma,peak_threshold,tail_proportion_y,slope_epsilon,energy_tau,avg_lcs,mr,mdr,mrr,mrr_pct,map_pct,top5_prec,top10_prec\n")
+            f_det.write("combo_id,method,dataset,pairs,checkerboard_radius_L,kernel_sigma,peak_threshold,tail_proportion_y,slope_epsilon,energy_tau,avg_lcs,mr,mdr,mrr,mrr_pct,map_pct,top5_prec,top10_prec,threshold,f1_score,precision,recall,fpr,fnr,tp,fp,fn,tn,accuracy\n")
             for combo_idx, (combo, m) in enumerate(combo_metrics.items(), 1):
                 r, k, pk, tl, se, et = combo
                 avg_lcs = m["lcs"]
@@ -547,12 +564,23 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
                 avg_map = m["map"]
                 top5_prec = m["top5"]
                 top10_prec = m["top10"]
+                th = m["thresh"]
+                f1 = m["f1"]
+                prec = m["precision"]
+                rec = m["recall"]
+                fpr = m["fpr"]
+                fnr = m["fnr"]
+                tp = m["tp"]
+                fp = m["fp"]
+                fn = m["fn"]
+                tn = m["tn"]
+                acc = m["accuracy"]
 
                 with open(summary_path, 'a', encoding='utf-8') as f_sum:
-                    f_sum.write(f"{method},{n_valid},{avg_lcs:.4f},{avg_mr:.2f},{avg_mrr:.4f},{avg_mdr:.1f},{avg_map:.4f},{top5_prec:.4f},{top10_prec:.4f},0.00,{r},{k},{pk:.2f},{tl:.2f},{se:.2f},{et:.2f}\n")
+                    f_sum.write(f"{method},{n_valid},{avg_lcs:.4f},{avg_mr:.2f},{avg_mrr:.4f},{avg_mdr:.1f},{avg_map:.4f},{top5_prec:.4f},{top10_prec:.4f},{th:.4f},{f1:.4f},{prec:.4f},{rec:.4f},{fpr:.4f},{fnr:.4f},{tp},{fp},{fn},{tn},{acc:.4f},{r},{k},{pk:.2f},{tl:.2f},{se:.2f},{et:.2f}\n")
                 
-                f_det.write(f"{combo_idx},{method},{dataset_dir.name},{n_valid},{r},{k},{pk:.2f},{tl:.2f},{se:.2f},{et:.2f},{avg_lcs:.4f},{avg_mr:.2f},{avg_mdr:.1f},{avg_mrr:.4f},{avg_mrr*100:.2f},{avg_map*100:.2f},{top5_prec:.4f},{top10_prec:.4f}\n")
-                all_combos_results.append((avg_lcs, avg_mr, avg_mdr, avg_mrr, avg_map, top5_prec, top10_prec))
+                f_det.write(f"{combo_idx},{method},{dataset_dir.name},{n_valid},{r},{k},{pk:.2f},{tl:.2f},{se:.2f},{et:.2f},{avg_lcs:.4f},{avg_mr:.2f},{avg_mdr:.1f},{avg_mrr:.4f},{avg_mrr*100:.2f},{avg_map*100:.2f},{top5_prec:.4f},{top10_prec:.4f},{th:.4f},{f1:.4f},{prec:.4f},{rec:.4f},{fpr:.4f},{fnr:.4f},{tp},{fp},{fn},{tn},{acc:.4f}\n")
+                all_combos_results.append((avg_lcs, avg_mr, avg_mdr, avg_mrr, avg_map, top5_prec, top10_prec, th, f1, prec, rec, fpr, fnr, tp, fp, fn, tn, acc))
 
         mean_lcs = float(np.mean([res[0] for res in all_combos_results])) if all_combos_results else 0.0
         mean_mr = float(np.mean([res[1] for res in all_combos_results])) if all_combos_results else 0.0
@@ -561,12 +589,33 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
         mean_map = float(np.mean([res[4] for res in all_combos_results])) if all_combos_results else 0.0
         mean_top5 = float(np.mean([res[5] for res in all_combos_results])) if all_combos_results else 0.0
         mean_top10 = float(np.mean([res[6] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_th = float(np.mean([res[7] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_f1 = float(np.mean([res[8] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_prec = float(np.mean([res[9] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_rec = float(np.mean([res[10] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_fpr = float(np.mean([res[11] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_fnr = float(np.mean([res[12] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_tp = int(round(np.mean([res[13] for res in all_combos_results]))) if all_combos_results else 0
+        mean_fp = int(round(np.mean([res[14] for res in all_combos_results]))) if all_combos_results else 0
+        mean_fn = int(round(np.mean([res[15] for res in all_combos_results]))) if all_combos_results else 0
+        mean_tn = int(round(np.mean([res[16] for res in all_combos_results]))) if all_combos_results else 0
+        mean_acc = float(np.mean([res[17] for res in all_combos_results])) if all_combos_results else 0.0
 
         print(f"\n  [{method.upper()}] Experiments finished. Results saved to CSV: {detailed_csv_path}")
-        print(f"\n  === TABLA ACADÉMICA DE RESULTADOS EMPÍRICOS ({method.upper()}) ===")
+        print(f"\n  === TABLA 1: RANKING Y COBERTURA ({method.upper()}) ===")
         print(f"  {'Dataset':<15} | {'Method':<12} | {'MRR (%)':<10} | {'MAP (%)':<10} | {'MR':<8} | {'MDR':<8} | {'Top-5 (%)':<10} | {'Top-10 (%)':<10}")
         print(f"  {'-'*95}")
         print(f"  {dataset_dir.name:<15} | {method.upper():<12} | {mean_mrr*100:<10.2f} | {mean_map*100:<10.2f} | {mean_mr:<8.2f} | {mean_mdr:<8.1f} | {mean_top5*100:<10.2f} | {mean_top10*100:<10.2f}")
+
+        print(f"\n  === TABLA 2: CLASIFICACIÓN BINARIA ({method.upper()}) ===")
+        print(f"  {'Dataset':<15} | {'Method':<12} | {'Threshold':<11} | {'F1-Score':<10} | {'Precision (%)':<14} | {'Recall (%)':<12} | {'FPR (%)':<9} | {'FNR (%)':<9}")
+        print(f"  {'-'*105}")
+        print(f"  {dataset_dir.name:<15} | {method.upper():<12} | {mean_th:<11.4f} | {mean_f1:<10.4f} | {mean_prec*100:<14.2f} | {mean_rec*100:<12.2f} | {mean_fpr*100:<9.2f} | {mean_fnr*100:<9.2f}")
+
+        print(f"\n  === MATRICES DE CONFUSIÓN ({method.upper()}) ===")
+        print(f"  {'Dataset':<15} | {'Method':<12} | {'Threshold':<11} | {'TP':<8} | {'FP':<8} | {'FN':<8} | {'TN':<8} | {'Accuracy (%)':<13}")
+        print(f"  {'-'*100}")
+        print(f"  {dataset_dir.name:<15} | {method.upper():<12} | {mean_th:<11.4f} | {mean_tp:<8d} | {mean_fp:<8d} | {mean_fn:<8d} | {mean_tn:<8d} | {mean_acc*100:<13.2f}")
 
     print("\nCustom Parameter Experiments Completed Successfully!")
 
