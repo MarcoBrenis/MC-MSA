@@ -289,7 +289,7 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
                 pass
 
         # Parameter grid combinations matching thesis hyperparameters table
-        grid_r = args.radii if args.radii else DEFAULT_RADII
+        grid_L = args.radii if args.radii else DEFAULT_RADII
         grid_k = args.kernel_sizes if args.kernel_sizes else DEFAULT_KERNEL_SIZES
         grid_pk = args.peak_thresholds if args.peak_thresholds else DEFAULT_PEAK_THRESHOLDS
         grid_dm = getattr(args, 'min_separations', None) or DEFAULT_MIN_SEPARATIONS
@@ -297,7 +297,7 @@ def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir
         grid_se = args.slope_epsilons if args.slope_epsilons else DEFAULT_SLOPE_EPSILONS
         grid_et = args.energy_taus if args.energy_taus else DEFAULT_ENERGY_TAUS
 
-        grid_combinations = list(itertools.product(grid_r, grid_k, grid_pk, grid_tl, grid_se, grid_et))
+        grid_combinations = list(itertools.product(grid_L, grid_k, grid_pk, grid_tl, grid_se, grid_et))
         if getattr(args, 'max_grid_evals', None) and args.max_grid_evals < len(grid_combinations):
             step = max(1, len(grid_combinations) // args.max_grid_evals)
             grid_combinations = grid_combinations[::step][:args.max_grid_evals]
