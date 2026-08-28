@@ -1,5 +1,0 @@
-Comparativa: 1.mp3 vs 2.mp3
-Metodo: pyin
-Original: C-A-C-A-A-A-C-A-A-A-A-A-A-A-C-A-A-C-A-A-A-A-C-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-C-A-A-A-C-A-A-A-A-A-A-A-A-A-A-A-A-A-C-A-A-A-C-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-C-A-A-C-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A
-Cover:    A-C-A-A-A-C-C-A-A-A-A-C-C-A-A-A-A-A-A-A-C-A-A-A-A-A-C-C-A-C-A-A-A-A-A-A-A-A-A-A-A-A-C-A-C-A-C-A-C-A-C-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-A-C-A
-LCS Similarity: 0.5509
