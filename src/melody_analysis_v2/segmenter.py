@@ -7,8 +7,9 @@ from typing import List
 from pathlib import Path
 
 import numpy as np
-from scipy.ndimage import gaussian_filter1d, median_filter
+from scipy.ndimage import gaussian_filter1d, median_filter, uniform_filter1d
 from scipy.signal import find_peaks
+
 
 from .features import MelodyFeatures
 
@@ -42,11 +43,15 @@ class MelodySegmenter:
         *,
         kernel_size: int = 2,
         peak_threshold: float = 0.2,
-        min_separation: int = 10,
         use_self_similarity: bool = True,
         checkerboard_radius: int = 8,
         max_ssm_frames: int = 3000,
         filter_type: str = "gaussian",
+        adaptive_threshold: bool = False,
+        hanning_size: int = 5,
+        window_w: int = 43,
+        alpha: float = 0.55,
+        neighbor_dist: int = 10,
     ) -> None:
         """Create a segmenter.
 
@@ -58,16 +63,23 @@ class MelodySegmenter:
             Minimum relative height (0-1) for peaks to be considered boundaries.
         filter_type:
             Type of smoothing filter: 'gaussian', 'median', or 'hybrid'.
+        adaptive_threshold:
+            If True, uses CIARP adaptive threshold T(t) = mu_local + alpha * sigma_local.
         """
 
         self.kernel_size = kernel_size
         self.peak_threshold = peak_threshold
-        self.min_separation = min_separation
         self.use_self_similarity = use_self_similarity
         self.checkerboard_radius = checkerboard_radius
         self.max_ssm_frames = max_ssm_frames
         self.filter_type = filter_type
+        self.adaptive_threshold = adaptive_threshold
+        self.hanning_size = hanning_size
+        self.window_w = window_w
+        self.alpha = alpha
+        self.neighbor_dist = neighbor_dist
         self.last_step = 1
+
 
     def compute_self_similarity(self, features: MelodyFeatures) -> np.ndarray:
         """Compute a cosine self-similarity matrix from pitch and energy."""
@@ -76,11 +88,11 @@ class MelodySegmenter:
 
         stacked = np.vstack((features.pitch_midi, features.energy)).T.astype(np.float32)
         mean = np.mean(stacked, axis=0, keepdims=True)
-        std = np.std(stacked, axis=0, keepdims=True) + 1e-40
+        std = np.std(stacked, axis=0, keepdims=True) + 1e-6
         stacked = (stacked - mean) / std
         
         norms = np.linalg.norm(stacked, axis=1, keepdims=True)
-        normalized = stacked / np.maximum(norms, 1e-40)
+        normalized = stacked / np.maximum(norms, 1e-6)
 
         sim = (normalized @ normalized.T).astype(np.float32)
         sim = (sim + 1.0) / 2.0
@@ -179,18 +191,43 @@ class MelodySegmenter:
         return combined
 
     def find_boundaries(self, novelty: np.ndarray) -> np.ndarray:
-        """Locate peaks in the novelty curve."""
+        """Locate peaks in the novelty curve using static threshold or CIARP adaptive thresholding."""
 
         if novelty.size == 0:
             return np.array([], dtype=int)
+
+        if getattr(self, "adaptive_threshold", False):
+            # 1. Hanning window smoothing (L_smooth = 5)
+            h_size = getattr(self, "hanning_size", 5)
+            if h_size > 1 and novelty.size >= h_size:
+                hann_win = np.hanning(h_size)
+                hann_win = hann_win / np.sum(hann_win)
+                novelty_smooth = np.convolve(novelty, hann_win, mode="same")
+            else:
+                novelty_smooth = novelty
+
+            # 2. Adaptive local threshold T(t) = mu_local(t) + alpha * sigma_local(t)
+            w_size = getattr(self, "window_w", 43)
+            alpha = getattr(self, "alpha", 0.55)
+            dist = getattr(self, "neighbor_dist", 10)
+
+            mu_local = uniform_filter1d(novelty_smooth, size=w_size)
+            var_local = uniform_filter1d((novelty_smooth - mu_local) ** 2, size=w_size)
+            sigma_local = np.sqrt(np.maximum(var_local, 0.0))
+            threshold_t = mu_local + alpha * sigma_local
+
+            # 3. Peak selection: N(t_peak) >= T(t_peak) and local maximum within +-10 frames
+            peaks, _ = find_peaks(novelty_smooth, height=threshold_t, distance=dist)
+            return peaks.astype(int)
 
         if np.max(novelty) > 0:
             height = self.peak_threshold * np.max(novelty)
         else:
             height = self.peak_threshold
 
-        peaks, _ = find_peaks(novelty, height=height, distance=self.min_separation)
+        peaks, _ = find_peaks(novelty, height=height)
         return peaks.astype(int)
+
 
     def segment(self, features: MelodyFeatures) -> List[MelodySegment]:
         """Segment the melody based on extracted features with adaptive downsampling."""

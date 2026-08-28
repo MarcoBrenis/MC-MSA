@@ -47,6 +47,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 from src.melody_analysis_v2 import (
     MelodyAnalyzer,
     MelodyClassifierCIARP,
+    MelodySegmenter,
     MelodyFeatures,
     MelodySegmentAnnotation,
 )
@@ -57,6 +58,11 @@ CIARP_VOICING_TAU = 0.5
 CIARP_DELTA_MS = 200
 CIARP_THETA_SLOPE = -0.15
 CIARP_THETA_ENERGY = 0.15
+CIARP_HANNING_L = 5
+CIARP_WINDOW_W = 43
+CIARP_ALPHA = 0.55
+CIARP_NEIGHBOR_DIST = 10
+
 
 # Default 8 Pitch Extractors evaluated in CIARP 2026 Paper (Table 2)
 CIARP_EVAL_METHODS = [
@@ -139,6 +145,13 @@ def run_ciarp_benchmark(
     print(f"Hyperparameters: theta_slope={CIARP_THETA_SLOPE}, theta_energy={CIARP_THETA_ENERGY}")
     print(f"========================================================\n")
 
+    segmenter = MelodySegmenter(
+        adaptive_threshold=True,
+        hanning_size=CIARP_HANNING_L,
+        window_w=CIARP_WINDOW_W,
+        alpha=CIARP_ALPHA,
+        neighbor_dist=CIARP_NEIGHBOR_DIST
+    )
     classifier = MelodyClassifierCIARP(
         slope_epsilon=abs(CIARP_THETA_SLOPE),
         energy_tau=CIARP_THETA_ENERGY
@@ -148,7 +161,12 @@ def run_ciarp_benchmark(
     
     for method in methods:
         print(f"\n---> Evaluating Method: {METHOD_DISPLAY_NAMES.get(method, method)}...")
-        analyzer = MelodyAnalyzer(extraction_method=method, classifier=classifier)
+        analyzer = MelodyAnalyzer(
+            extraction_method=method,
+            classifier=classifier,
+            segmenter=segmenter
+        )
+
         
         nlcs_scores = []
         dtw_distances = []
