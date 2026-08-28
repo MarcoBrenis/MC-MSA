@@ -4,7 +4,7 @@ from .features import MelodyFeatures, extract_melody_features
 from .segmenter import MelodySegment, MelodySegmenter
 from .segmenter_beta import MelodySegmenterBeta
 from .classifier import MelodySegmentAnnotation, MelodyClassifier
-from .classifier_thesis import MelodyClassifierThesis
+from .classifier_thesis import MelodyClassifierThesis, MelodyClassifierCIARP, MelodyClassifierPaper
 from .classifier_thesis_beta import MelodyClassifierThesisBeta
 from .classifier_v1_rules import MelodyClassifierV1Rules
 from .pipeline import MelodyAnalyzer, MelodyAnalysisResult, analyze_melody
@@ -33,6 +33,9 @@ __all__ = [
     "MelodySegmentAnnotation",
     "MelodyClassifier",
     "MelodyClassifierThesis",
+    "MelodyClassifierCIARP",
+    "MelodyClassifierPaper",
+
     "MelodyClassifierThesisBeta",
     "MelodyClassifierV1Rules",
     "MelodyAnalyzer",

@@ -76,23 +76,24 @@ class MelodyClassifierThesis:
                 else:
                     slope = 0.0
                 
-                # Logic for A vs C
-                # A: slope > epsilon OR energy_tail > tau (tension/openness)
-                # C: slope < -epsilon AND energy_tail < tau (resolution/closure)
+                # Strict Caplin formal function classification (A, C, X)
+                # Antecedent (A): Ascending pitch slope OR high tail energy (open tension)
+                # Consequent (C): Descending pitch slope AND low tail energy (harmonic resolution)
+                # Continuation/Ambiguous (X): Neutral slope and moderate energy
                 
-                if slope > self.slope_epsilon or tail_energy > self.energy_tau:
+                if slope > self.slope_epsilon:
                     label = "Antecedent"
-                elif slope < -self.slope_epsilon and tail_energy < (self.energy_tau / 2.0):
+                elif slope < -self.slope_epsilon and tail_energy < self.energy_tau:
+                    label = "Consequent"
+                elif tail_energy > (self.energy_tau * 1.5):
+                    label = "Antecedent"
+                elif tail_energy < (self.energy_tau * 0.5):
                     label = "Consequent"
                 else:
-                    # Ambiguous cases
-                    if slope < 0:
-                        label = "Consequent"
-                    else:
-                        label = "Antecedent"
-                descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
+                    label = "Continuation"  # Class 'X' (Neutral/Ambiguous)
                 
-                confidence = 0.8 # Fixed confidence for logic-based labels
+                descriptor = {"f0_slope": slope, "energy_tail": tail_energy}
+                confidence = 0.8  # Fixed confidence for logic-based labels
 
             annotations.append(
                 MelodySegmentAnnotation(
@@ -123,3 +124,9 @@ def calculate_lcs(seq1: List[str], seq2: List[str]) -> float:
         prev, curr = curr, [0] * (m + 1)
     
     return 2.0 * prev[m] / (n + m)
+
+
+# Alias definitions for CIARP 2026 / CLEI paper classifier compatibility
+MelodyClassifierCIARP = MelodyClassifierThesis
+MelodyClassifierPaper = MelodyClassifierThesis
+
