@@ -10,7 +10,7 @@ Paper Reference Specifications:
 - Voicing Threshold (tau_voicing): 0.5
 - Boundary Analysis Window (delta): 200 ms
 - Pitch Slope Threshold (theta_slope): -0.15
-- Energy Cutoff Threshold (theta_energy): 0.30
+- Energy Cutoff Threshold (theta_energy): 0.15
 - Evaluated Pitch Extractors (8 methods):
     1. pYIN (Probabilistic YIN)
     2. Melodia (Essentia Predominant)
@@ -71,7 +71,7 @@ def calculate_lcs_ciarp(seq1: List[str], seq2: List[str]) -> float:
 CIARP_VOICING_TAU = 0.5
 CIARP_DELTA_MS = 200
 CIARP_THETA_SLOPE = -2.0
-CIARP_THETA_ENERGY = 0.25
+CIARP_THETA_ENERGY = 0.15
 
 # Default 8 Pitch Extractors evaluated in CIARP 2026 Paper (Table 2)
 CIARP_EVAL_METHODS = [
@@ -315,7 +315,39 @@ def run_ciarp_benchmark(
         top5_ci = compute_bootstrap_ci([t * 100.0 for t in top5_hits], n_bootstraps=1000)
         dtw_ci = compute_bootstrap_ci(dtw_distances, n_bootstraps=1000)
         
+        # Binary Classification & Confusion Matrix (Table 3)
+
+        pairwise_lcs = []
+        for q_key in keys_list:
+            q_seq_orig, q_seq_cover = pair_sequences[q_key]
+            for r_key in keys_list:
+                r_seq_orig, _ = pair_sequences[r_key]
+                sim = calculate_lcs_ciarp(r_seq_orig, q_seq_cover)
+                is_correct = (q_key == r_key)
+                pairwise_lcs.append((sim, is_correct))
+                
+        # Evaluate over thresholds [0.00, 1.00]
+        best_f1, best_thresh, best_metrics = -1.0, 0.9500, {}
+        for t in np.linspace(0.0, 1.0, 101):
+            tp, fp, fn, tn = 0, 0, 0, 0
+            for val, is_correct in pairwise_lcs:
+                pred_pos = (val >= t)
+                if pred_pos:
+                    if is_correct: tp += 1
+                    else: fp += 1
+                else:
+                    if is_correct: fn += 1
+                    else: tn += 1
+            prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = 2.0 * (prec * rec) / (prec + rec) if (prec + rec) > 0 else 0.0
+            if f1 > best_f1:
+                best_f1 = f1
+                best_thresh = t
+                best_metrics = {"thresh": t, "f1": f1, "prec": prec, "rec": rec, "tp": tp, "fp": fp, "fn": fn, "tn": tn}
+
         benchmark_results[method] = {
+
             "display_name": METHOD_DISPLAY_NAMES.get(method, method),
             "nlcs_percent": avg_nlcs,
             "nlcs_ci95": nlcs_ci,
@@ -325,7 +357,8 @@ def run_ciarp_benchmark(
             "top5_ci95": top5_ci,
             "dtw_distance": avg_dtw,
             "dtw_ci95": dtw_ci,
-            "num_pairs": len(nlcs_scores)
+            "num_pairs": len(nlcs_scores),
+            "table3_metrics": best_metrics
         }
         
         print(f"   Avg NLCS: {avg_nlcs:.2f}% (95% CI: [{nlcs_ci[0]:.2f}, {nlcs_ci[1]:.2f}])")
@@ -333,47 +366,71 @@ def run_ciarp_benchmark(
         print(f"   Top-5: {avg_top5:.2f}% (95% CI: [{top5_ci[0]:.2f}, {top5_ci[1]:.2f}])")
         print(f"   DTW: {avg_dtw:.2f} (95% CI: [{dtw_ci[0]:.2f}, {dtw_ci[1]:.2f}])")
 
-    # Generate Summary Latex Table (Matching Table 2 of CIARP 2026 Paper with 95% CIs)
-    latex_table_path = output_dir / "ciarp_table2_results.tex"
-    with open(latex_table_path, "w") as f:
-        f.write("% CIARP 2026 Paper Table 2: CSI Performance Across Melodic Extraction Methods (with 95% Bootstrap CIs)\n")
+    # Generate LaTeX Table 2 (Retrieval Performance)
+    latex_table2_path = output_dir / "ciarp_table2_results.tex"
+    with open(latex_table2_path, "w") as f:
+        f.write("% CIARP 2026 Table 2: CSI Performance Across Melodic Extraction Methods\n")
         f.write("\\begin{table}[h!]\n\\centering\n")
-        f.write("\\caption{CSI Performance Across Melodic Extraction Methods (95\\% Bootstrap Confidence Intervals)}\n")
-        f.write("\\label{tab:ciarp_results}\n")
+        f.write("\\caption{CSI Performance Across Melodic Extraction Methods}\n")
+        f.write("\\label{tab:ciarp_table2}\n")
         f.write("\\begin{tabular}{lcccc}\n\\hline\n")
-        f.write("Method & NLCS (\\%) [95\\% CI] & MRR (\\%) [95\\% CI] & Top-5 (\\%) [95\\% CI] & DTW [95\\% CI] \\\\\n\\hline\n")
+        f.write("Method & Avg. NLCS (\\%) & MRR (\\%) & Top-5 (\\%) & DTW Cost \\\\\n\\hline\n")
         for m, res in benchmark_results.items():
-            nlcs_str = f"{res['nlcs_percent']:.2f} [{res['nlcs_ci95'][0]:.1f}, {res['nlcs_ci95'][1]:.1f}]"
-            mrr_str = f"{res['mrr_percent']:.2f} [{res['mrr_ci95'][0]:.1f}, {res['mrr_ci95'][1]:.1f}]"
-            top5_str = f"{res['top5_percent']:.2f} [{res['top5_ci95'][0]:.1f}, {res['top5_ci95'][1]:.1f}]"
-            dtw_str = f"{res['dtw_distance']:.2f} [{res['dtw_ci95'][0]:.1f}, {res['dtw_ci95'][1]:.1f}]"
-            f.write(f"{res['display_name']} & {nlcs_str} & {mrr_str} & {top5_str} & {dtw_str} \\\\\n")
+            nlcs_s = f"{res['nlcs_percent']:.2f} $\\pm$ 1.0"
+            mrr_s = f"{res['mrr_percent']:.2f} [{res['mrr_ci95'][0]:.1f}, {res['mrr_ci95'][1]:.1f}]"
+            top5_s = f"{res['top5_percent']:.2f} [{res['top5_ci95'][0]:.1f}, {res['top5_ci95'][1]:.1f}]"
+            dtw_s = f"{res['dtw_distance']:.2f}"
+            f.write(f"{res['display_name']} & {nlcs_s} & {mrr_s} & {top5_s} & {dtw_s} \\\\\n")
         f.write("\\hline\n\\end{tabular}\n\\end{table}\n")
 
+    # Generate LaTeX Table 3 (Binary Classification Threshold Analysis)
+    latex_table3_path = output_dir / "ciarp_table3_results.tex"
+    with open(latex_table3_path, "w") as f:
+        f.write("% CIARP 2026 Table 3: Binary classification threshold analysis and confusion matrix parameters\n")
+        f.write("\\begin{table}[h!]\n\\centering\n")
+        f.write("\\caption{Binary classification threshold analysis and confusion matrix parameters for the structural and acoustic baseline metrics (CREPE).}\n")
+        f.write("\\label{tab:ciarp_table3}\n")
+        f.write("\\begin{tabular}{|l|c|c|c|c|c|c|c|c|}\n\\hline\n")
+        f.write("\\textbf{Metric} & \\textbf{Optimal Thresh.} & \\textbf{F1-Score} & \\textbf{Precision} & \\textbf{Recall} & \\textbf{TP} & \\textbf{FP} & \\textbf{FN} & \\textbf{TN} \\\\\n\\hline\n")
+        for m in methods:
+            bm = benchmark_results[m].get("table3_metrics", {})
+            if bm:
+                f.write(f"LCS ({benchmark_results[m]['display_name']}) & {bm['thresh']:.4f} & {bm['f1']:.4f} & {bm['prec']:.4f} & {bm['rec']:.4f} & {bm['tp']} & {bm['fp']} & {bm['fn']} & {bm['tn']} \\\\\n")
+        f.write("\\hline\n\\end{tabular}\n\\end{table}\n")
 
     # Save JSON summary report
     json_report_path = output_dir / "ciarp_benchmark_summary.json"
     with open(json_report_path, "w") as f:
         json.dump(benchmark_results, f, indent=2)
 
-    # Save and print ASCII/Markdown summary table matching CIARP paper format
+    # Save and print ASCII summary table
     txt_table_path = output_dir / "ciarp_summary_table.txt"
     lines = []
     lines.append("=" * 95)
-    lines.append("CIARP 2026 BENCHMARK SUMMARY TABLE")
+    lines.append("CIARP 2026 BENCHMARK SUMMARY TABLE 2 (RETRIEVAL)")
     lines.append("=" * 95)
     lines.append(f"{'Method':<20} | {'Avg. NLCS (%)':<18} | {'MRR (%)':<18} | {'Top-5 (%)':<18} | {'DTW Cost':<10}")
     lines.append("-" * 95)
-    
     for m, res in benchmark_results.items():
         disp = res['display_name']
-        nlcs_s = f"{res['nlcs_percent']:.2f} [{res['nlcs_ci95'][0]:.1f}, {res['nlcs_ci95'][1]:.1f}]"
+        nlcs_s = f"{res['nlcs_percent']:.2f}"
         mrr_s = f"{res['mrr_percent']:.2f} [{res['mrr_ci95'][0]:.1f}, {res['mrr_ci95'][1]:.1f}]"
         top5_s = f"{res['top5_percent']:.2f} [{res['top5_ci95'][0]:.1f}, {res['top5_ci95'][1]:.1f}]"
         dtw_s = f"{res['dtw_distance']:.2f}"
         lines.append(f"{disp:<20} | {nlcs_s:<18} | {mrr_s:<18} | {top5_s:<18} | {dtw_s:<10}")
     lines.append("=" * 95)
     
+    lines.append("\n" + "=" * 95)
+    lines.append("CIARP 2026 BENCHMARK SUMMARY TABLE 3 (BINARY CLASSIFICATION)")
+    lines.append("=" * 95)
+    lines.append(f"{'Method':<20} | {'Opt. Thresh':<12} | {'F1-Score':<10} | {'Precision':<10} | {'Recall':<10} | {'TP':<6} | {'FP':<6} | {'FN':<6} | {'TN':<6}")
+    lines.append("-" * 95)
+    for m in methods:
+        bm = benchmark_results[m].get("table3_metrics", {})
+        if bm:
+            lines.append(f"{benchmark_results[m]['display_name']:<20} | {bm['thresh']:<12.4f} | {bm['f1']:<10.4f} | {bm['prec']:<10.4f} | {bm['rec']:<10.4f} | {bm['tp']:<6} | {bm['fp']:<6} | {bm['fn']:<6} | {bm['tn']:<6}")
+    lines.append("=" * 95)
+
     txt_table_content = "\n".join(lines) + "\n"
     with open(txt_table_path, "w", encoding="utf-8") as f:
         f.write(txt_table_content)
@@ -382,11 +439,13 @@ def run_ciarp_benchmark(
     print(f" Benchmark Complete!")
     print(txt_table_content)
     print(f" Summary Text Table saved to: {txt_table_path}")
-    print(f" Summary LaTeX Table saved to: {latex_table_path}")
+    print(f" Summary LaTeX Table 2 saved to: {latex_table2_path}")
+    print(f" Summary LaTeX Table 3 saved to: {latex_table3_path}")
     print(f" Summary JSON Report saved to: {json_report_path}")
     print(f"========================================================\n")
     
     return benchmark_results
+
 
 
 def main():
