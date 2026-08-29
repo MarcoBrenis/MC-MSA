@@ -81,9 +81,10 @@ CIARP_EVAL_METHODS = [
     'crepe',
     'rmvpe',
     'fcn_f0',
-    'pyin_crepe',
+    'crepe_pyin',
     'demucs_crepe'
 ]
+
 
 METHOD_DISPLAY_NAMES = {
     'pyin': '1. pYIN',
