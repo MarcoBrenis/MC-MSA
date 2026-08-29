@@ -1024,7 +1024,7 @@ def extract_melody_features(
         pitch_midi, confidence = _extract_durrieu(audio, sample_rate, hop_length)
     elif method == "demucs_crepe":
         pitch_midi, confidence = _extract_demucs_crepe(audio, sample_rate, hop_length, label=label)
-    elif method == "ensemble":
+    elif method == "ensemble" or method == "pyin_crepe":
         p_midi, p_conf = _extract_pyin(
             audio, sample_rate, hop_length, fmin, fmax, frame_length
         )
@@ -1039,6 +1039,7 @@ def extract_melody_features(
         # Or a weighted average? Let's go with max confidence for pitch selection
         pitch_midi = np.where(p_conf >= c_conf, p_midi, c_midi)
         confidence = np.maximum(p_conf, c_conf)
+
     elif method == "bs_roformer_rmvpe" or method == "bs_roformer":
         pitch_midi, confidence = _extract_bs_roformer_rmvpe(audio, sample_rate, hop_length, label=label)
     elif method == "bs_roformer_crepe":
