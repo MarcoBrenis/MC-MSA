@@ -92,9 +92,11 @@ METHOD_DISPLAY_NAMES = {
     'crepe': '4. CREPE',
     'rmvpe': '5. RMVPE',
     'fcn_f0': '6. FCN-f0',
-    'pyin_crepe': '7. pYIN + CREPE',
+    'pyin_crepe': '7. CREPE + pYIN',
+    'crepe_pyin': '7. CREPE + pYIN',
     'demucs_crepe': '8. Demucs + CREPE',
 }
+
 
 
 def get_audio_files(directory_path: Path) -> Dict[str, Path]:

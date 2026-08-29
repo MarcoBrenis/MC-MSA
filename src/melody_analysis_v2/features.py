@@ -1024,7 +1024,8 @@ def extract_melody_features(
         pitch_midi, confidence = _extract_durrieu(audio, sample_rate, hop_length)
     elif method == "demucs_crepe":
         pitch_midi, confidence = _extract_demucs_crepe(audio, sample_rate, hop_length, label=label)
-    elif method == "ensemble" or method == "pyin_crepe":
+    elif method == "ensemble" or method == "pyin_crepe" or method == "crepe_pyin":
+
         p_midi, p_conf = _extract_pyin(
             audio, sample_rate, hop_length, fmin, fmax, frame_length
         )
