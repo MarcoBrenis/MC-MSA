@@ -264,9 +264,9 @@ def clear_cache_dir(target_dir: Path, description: str):
     """Safely removes a cache directory."""
     if target_dir.exists():
         shutil.rmtree(target_dir)
-        print(f" [CACHE FLUSH CIARP2] Eliminada carpeta de caché: {target_dir} ({description})")
+        print(f" [CACHE FLUSH CIARP2] Removed cache folder: {target_dir} ({description})")
     else:
-        print(f" [CACHE INFO CIARP2] La carpeta {target_dir} ya estaba vacía.")
+        print(f" [CACHE INFO CIARP2] Directory {target_dir} was already empty.")
 
 
 # ==============================================================================
@@ -280,11 +280,11 @@ def run_phase1_extraction(
     legacy_cache_dir: Path = Path("cache_ciarp")
 ) -> Dict[Tuple[str, str], MelodyFeatures]:
     """
-    FASE 1 CIARP2: Extrae contornos de pitch (f0), tiempos y energía.
-    Guarda los resultados en cache_ciarp2/phase1_f0/{method}/{filename}.json
+    PHASE 1 CIARP2: Extracts pitch contours (f0), timestamps, and energy.
+    Saves results to cache_ciarp2/phase1_f0/{method}/{filename}.json
     """
     print("\n" + "=" * 80)
-    print(" FASE 1 CIARP2: Extracción y Caché de Características de Melodía (f0 Pitch)")
+    print(" PHASE 1 CIARP2: Melody Feature Extraction & Caching (f0 Pitch)")
     print("=" * 80)
     
     p1_dir = get_phase_cache_dirs(base_cache_dir)["phase1"]
@@ -326,7 +326,7 @@ def run_phase1_extraction(
             
             # Extract features directly if not found in any cache
             if features is None:
-                print(f"   [FASE 1 CIARP2 - Extrayendo] {method} | {file_path.name}...")
+                print(f"   [PHASE 1 CIARP2 - Extracting] {method} | {file_path.name}...")
                 target_sr = 16000 if method in ["rmvpe", "crepe", "bs_roformer_rmvpe", "demucs_rmvpe"] else analyzer.sample_rate
                 audio, sr = librosa.load(str(file_path), sr=target_sr)
                 features = extract_melody_features(audio, sr, method=method, hop_length=analyzer.hop_length, label=file_path.name)
@@ -340,7 +340,7 @@ def run_phase1_extraction(
                 
             extracted_features[(method, file_key, file_path.stem)] = features
             
-        print(f" [FASE 1 COMPLETADA CIARP2] Método: {METHOD_DISPLAY_NAMES.get(method, method)}")
+        print(f" [PHASE 1 COMPLETED CIARP2] Method: {METHOD_DISPLAY_NAMES.get(method, method)}")
         
     return extracted_features
 
@@ -358,11 +358,11 @@ def run_phase2_matrix_generation(
     classifier: MelodyClassifierThesis
 ) -> Dict[str, Any]:
     """
-    FASE 2 CIARP2: Lee f0 de Fase 1, realiza la segmentación formal (SSM / Algoritmo 1) y
-    calcula la matriz de alineamiento DTW alineada en Tiempo y Frecuencia (Key-Invariant DTW).
+    PHASE 2 CIARP2: Reads f0 from Phase 1, performs formal segmentation (SSM / Algorithm 1),
+    and computes Dynamic Frequency Warping (DFW, Matsumoto 1987) & Time-Frequency Aligned DTW.
     """
     print("\n" + "=" * 80)
-    print(" FASE 2 CIARP2: Generación de SSM, Segmentación y DTW Alineado en Tiempo y Frecuencia")
+    print(" PHASE 2 CIARP2: SSM Generation, Segmentation & Time-Frequency Aligned DTW")
     print("=" * 80)
     
     p1_dir = get_phase_cache_dirs(base_cache_dir)["phase1"]
@@ -372,7 +372,7 @@ def run_phase2_matrix_generation(
     phase2_data = {}
     
     for method in methods:
-        print(f"\n---> [FASE 2 CIARP2] Procesando Matrices y DTW Alineado para: {METHOD_DISPLAY_NAMES.get(method, method)}...")
+        print(f"\n---> [PHASE 2 CIARP2] Processing Matrices & Aligned DTW for: {METHOD_DISPLAY_NAMES.get(method, method)}...")
         method_p2_dir = p2_dir / method
         method_p2_dir.mkdir(parents=True, exist_ok=True)
         
@@ -445,7 +445,7 @@ def run_phase2_matrix_generation(
             "pair_dtw_metrics": pair_dtw_metrics,
             "common_keys": common_keys
         }
-        print(f" [FASE 2 COMPLETADA CIARP2] Matrices y DTW alineado en Tiempo-Frecuencia listos para {METHOD_DISPLAY_NAMES.get(method, method)}")
+        print(f" [PHASE 2 COMPLETED CIARP2] Matrices and Time-Frequency Aligned DTW ready for {METHOD_DISPLAY_NAMES.get(method, method)}")
         
     return phase2_data
 
@@ -461,11 +461,11 @@ def run_phase3_classification_reporting(
     base_cache_dir: Path
 ) -> Dict[str, Any]:
     """
-    FASE 3 CIARP2: Genera tablas formateadas reportando tanto el DTW Absoluto
-    como el DTW Alineado en Tiempo y Frecuencia (Key-Invariant DTW).
+    PHASE 3 CIARP2: Generates formatted report tables comparing Absolute DTW,
+    Time-Frequency Aligned DTW, and Matsumoto DFW.
     """
     print("\n" + "=" * 80)
-    print(" FASE 3 CIARP2: Resultados de Clasificador y Reporte DTW Alineado en Tiempo-Frecuencia")
+    print(" PHASE 3 CIARP2: Classifier Evaluation & DFW/DTW Report Generation")
     print("=" * 80)
     
     p3_dir = get_phase_cache_dirs(base_cache_dir)["phase3"]
@@ -475,7 +475,7 @@ def run_phase3_classification_reporting(
     benchmark_results = {}
     
     for method in methods:
-        print(f"\n---> [FASE 3 CIARP2] Calculando métricas para: {METHOD_DISPLAY_NAMES.get(method, method)}...")
+        print(f"\n---> [PHASE 3 CIARP2] Computing metrics for: {METHOD_DISPLAY_NAMES.get(method, method)}...")
         m_data = phase2_data[method]
         pair_sequences = m_data["pair_sequences"]
         pair_dtw_metrics = m_data["pair_dtw_metrics"]
@@ -681,7 +681,7 @@ def run_phase3_classification_reporting(
         latex_t3_str = f.read()
 
     print(f"\n========================================================")
-    print(f" BENCHMARK CIARP2 COMPLETO - TABLAS DE RESULTADOS")
+    print(f" CIARP2 BENCHMARK COMPLETED - RESULT TABLES")
     print(f"========================================================\n")
     print("--- LATEX TABLE 2 (TIME-FREQUENCY ALIGNED DTW) ---")
     print(latex_t2_str)
@@ -689,10 +689,10 @@ def run_phase3_classification_reporting(
     print(latex_t3_str)
     print("--- TEXT SUMMARY TABLE ---")
     print(txt_table_content)
-    print(f" Archivo LaTeX Tabla 2 guardado en: {latex_table2_path}")
-    print(f" Archivo LaTeX Tabla 3 guardado en: {latex_table3_path}")
-    print(f" Archivo Texto Resumen guardado en: {txt_table_path}")
-    print(f" Archivo JSON Resumen guardado en: {json_report_path}")
+    print(f" LaTeX Table 2 file saved to: {latex_table2_path}")
+    print(f" LaTeX Table 3 file saved to: {latex_table3_path}")
+    print(f" Text Summary file saved to: {txt_table_path}")
+    print(f" JSON Summary file saved to: {json_report_path}")
     print(f"========================================================\n")
     
     return benchmark_results
@@ -729,31 +729,31 @@ def main():
     
     if args.interactive:
         print("\n========================================================")
-        print(" MC-MSA CIARP2 (Time & Frequency Aligned DTW) - Caché")
+        print(" MC-MSA CIARP2 (Time & Frequency Aligned DTW) - Cache Options")
         print("========================================================")
-        print(" [1] Borrar Caché FASE 1 (Extracción de F0)")
-        print(" [2] Borrar Caché FASE 2 (SSM y DTW Alineado)")
-        print(" [3] Borrar Caché FASE 3 (Resultados y Tablas CIARP2)")
-        print(" [4] Borrar TODO el Caché CIARP2")
-        print(" [5] Ejecutar Fase 1 (Extracción de F0)")
-        print(" [6] Ejecutar Fase 2 (SSM y DTW Alineado Tiempo-Frecuencia)")
-        print(" [7] Ejecutar Fase 3 (Clasificador y Tablas CIARP2)")
-        print(" [8] Ejecutar Pipeline COMPLETO (Fases 1 -> 2 -> 3)")
-        print(" [0] Salir")
+        print(" [1] Flush PHASE 1 Cache (F0 Feature Extraction)")
+        print(" [2] Flush PHASE 2 Cache (SSM & Aligned DTW Matrices)")
+        print(" [3] Flush PHASE 3 Cache (Results & CIARP2 Tables)")
+        print(" [4] Flush ALL CIARP2 Cache")
+        print(" [5] Execute Phase 1 (F0 Extraction)")
+        print(" [6] Execute Phase 2 (SSM & Time-Frequency Aligned DTW)")
+        print(" [7] Execute Phase 3 (Classifier & CIARP2 Tables)")
+        print(" [8] Execute FULL Pipeline (Phases 1 -> 2 -> 3)")
+        print(" [0] Exit")
         print("========================================================")
-        choice = input("Selecciona una opción [0-8]: ").strip()
+        choice = input("Select an option [0-8]: ").strip()
         
         if choice == "1":
-            clear_cache_dir(phase_dirs["phase1"], "Fase 1: f0 pitch")
+            clear_cache_dir(phase_dirs["phase1"], "Phase 1: f0 pitch")
             return
         elif choice == "2":
-            clear_cache_dir(phase_dirs["phase2"], "Fase 2: SSM & DTW matrices")
+            clear_cache_dir(phase_dirs["phase2"], "Phase 2: SSM & DTW matrices")
             return
         elif choice == "3":
-            clear_cache_dir(phase_dirs["phase3"], "Fase 3: Clasificador")
+            clear_cache_dir(phase_dirs["phase3"], "Phase 3: Classifier")
             return
         elif choice == "4":
-            clear_cache_dir(base_cache_path, "TODAS las fases")
+            clear_cache_dir(base_cache_path, "ALL phases")
             return
         elif choice == "5":
             args.phase = "1"
@@ -764,18 +764,18 @@ def main():
         elif choice == "8":
             args.phase = "all"
         else:
-            print("Saliendo...")
+            print("Exiting...")
             return
 
     # Handle CLI cache clearing flags
     if args.clear_all_cache:
-        clear_cache_dir(base_cache_path, "TODAS las fases")
+        clear_cache_dir(base_cache_path, "ALL phases")
     if args.clear_phase1:
-        clear_cache_dir(phase_dirs["phase1"], "Fase 1: f0 pitch")
+        clear_cache_dir(phase_dirs["phase1"], "Phase 1: f0 pitch")
     if args.clear_phase2:
-        clear_cache_dir(phase_dirs["phase2"], "Fase 2: SSM & DTW matrices")
+        clear_cache_dir(phase_dirs["phase2"], "Phase 2: SSM & DTW matrices")
     if args.clear_phase3:
-        clear_cache_dir(phase_dirs["phase3"], "Fase 3: Clasificador")
+        clear_cache_dir(phase_dirs["phase3"], "Phase 3: Classifier")
 
     orig_files = get_audio_files(orig_path)
     cover_files = get_audio_files(cover_path)
@@ -792,7 +792,7 @@ def main():
     if args.phase in ["1", "all"]:
         run_phase1_extraction(all_audio_files, args.methods, base_cache_path)
         if args.phase == "1":
-            print("\n[FASE 1 COMPLETADA CIARP2] Las características f0 se han guardado en caché.")
+            print("\n[PHASE 1 COMPLETED CIARP2] F0 features successfully saved to cache.")
             return
 
     # EXECUTE PHASE 2
@@ -800,13 +800,13 @@ def main():
     if args.phase in ["2", "3", "all"]:
         phase2_data = run_phase2_matrix_generation(common_keys, orig_files, cover_files, args.methods, base_cache_path, classifier)
         if args.phase == "2":
-            print("\n[FASE 2 COMPLETADA CIARP2] Las matrices SSM y DTW alineado en Tiempo-Frecuencia se han guardado en caché.")
+            print("\n[PHASE 2 COMPLETED CIARP2] SSM matrices and Time-Frequency Aligned DTW successfully saved to cache.")
             return
 
     # EXECUTE PHASE 3
     if args.phase in ["3", "all"]:
         if phase2_data is None:
-            print("Error: Se requiere ejecutar o cargar Fase 2 para ejecutar Fase 3.")
+            print("Error: Phase 2 must be executed or loaded before Phase 3.")
             return
         run_phase3_classification_reporting(phase2_data, args.methods, output_path, base_cache_path)
 
