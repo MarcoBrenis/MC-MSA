@@ -97,6 +97,15 @@ class MelodyFeatures:
             return 0.0
         return float(self.times[-1] - self.times[0])
 
+    def to_dict(self) -> dict:
+        """Serialize MelodyFeatures to a dictionary."""
+        return {
+            "times": self.times.tolist() if isinstance(self.times, np.ndarray) else self.times,
+            "pitch_midi": self.pitch_midi.tolist() if isinstance(self.pitch_midi, np.ndarray) else self.pitch_midi,
+            "confidence": self.confidence.tolist() if isinstance(self.confidence, np.ndarray) else self.confidence,
+            "energy": self.energy.tolist() if isinstance(self.energy, np.ndarray) else self.energy,
+        }
+
     @classmethod
     def from_dict(cls, data: dict) -> MelodyFeatures:
         """Construct MelodyFeatures from a dictionary (e.g. deserialized JSON)."""
