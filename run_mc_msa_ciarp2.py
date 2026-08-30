@@ -211,7 +211,7 @@ def compute_dtw_distance(pitch1: np.ndarray, pitch2: np.ndarray) -> Dict[str, fl
         dfw_hz_2, _ = dynamic_frequency_warping(f0_1, f0_2)
         D_hz_dfw, wp_hz_dfw = librosa.sequence.dtw(f0_1.reshape(1, -1), dfw_hz_2.reshape(1, -1), metric='euclidean')
         res["hz_dfw_dtw_raw"] = float(D_hz_dfw[-1, -1])
-        res["hz_dfw_dtw_raw"] = float(D_hz_dfw[-1, -1] / len(wp_hz_dfw))
+        res["hz_dfw_dtw_norm"] = float(D_hz_dfw[-1, -1] / len(wp_hz_dfw))
     except Exception:
         pass
 
@@ -284,7 +284,7 @@ def run_phase1_extraction(
     Saves results to cache_ciarp2/phase1_f0/{method}/{filename}.json
     """
     print("\n" + "=" * 80)
-    print(" PHASE 1 CIARP2: Melody Feature Extraction & Caching (f0 Pitch)")
+    print(" PHASE 1 CIARP2: F0 Pitch & Energy Extraction & Caching ")
     print("=" * 80)
     
     p1_dir = get_phase_cache_dirs(base_cache_dir)["phase1"]
@@ -484,7 +484,9 @@ def run_phase3_classification_reporting(
         nlcs_scores = []
         exact_dtw_norm_list = []
         key_inv_dtw_norm_list = []
+        dfw_dtw_norm_list = []
         hz_exact_norm_list = []
+        hz_dfw_dtw_norm_list = []
         reciprocal_ranks = []
         top5_hits = []
         
@@ -494,12 +496,16 @@ def run_phase3_classification_reporting(
             nlcs_scores.append(nlcs * 100.0)
             
             dtw_res = pair_dtw_metrics[key]
-            if dtw_res["exact_norm"] < 990:
+            if dtw_res.get("exact_norm", 999) < 990:
                 exact_dtw_norm_list.append(dtw_res["exact_norm"])
-            if dtw_res["key_inv_exact_norm"] < 990:
+            if dtw_res.get("key_inv_exact_norm", 999) < 990:
                 key_inv_dtw_norm_list.append(dtw_res["key_inv_exact_norm"])
-            if dtw_res["hz_exact_norm"] < 990:
+            if dtw_res.get("dfw_dtw_norm", 999) < 990:
+                dfw_dtw_norm_list.append(dtw_res["dfw_dtw_norm"])
+            if dtw_res.get("hz_exact_norm", 999) < 990:
                 hz_exact_norm_list.append(dtw_res["hz_exact_norm"])
+            if dtw_res.get("hz_dfw_dtw_norm", 999) < 990:
+                hz_dfw_dtw_norm_list.append(dtw_res["hz_dfw_dtw_norm"])
 
         # Target cover retrieval ranking (Target Cover Last tie-breaking)
         for q_key in common_keys:
@@ -528,13 +534,18 @@ def run_phase3_classification_reporting(
         
         avg_exact_norm = float(np.mean(exact_dtw_norm_list)) if exact_dtw_norm_list else 0.0
         avg_key_inv_norm = float(np.mean(key_inv_dtw_norm_list)) if key_inv_dtw_norm_list else 0.0
+        avg_dfw_dtw_norm = float(np.mean(dfw_dtw_norm_list)) if dfw_dtw_norm_list else 0.0
         avg_hz_exact_norm = float(np.mean(hz_exact_norm_list)) if hz_exact_norm_list else 0.0
+        avg_hz_dfw_dtw_norm = float(np.mean(hz_dfw_dtw_norm_list)) if hz_dfw_dtw_norm_list else 0.0
 
         # Compute 95% Bootstrap Confidence Intervals (1000 resamples)
         nlcs_ci = compute_bootstrap_ci(nlcs_scores, n_bootstraps=1000)
         mrr_ci = compute_bootstrap_ci([r * 100.0 for r in reciprocal_ranks], n_bootstraps=1000)
         top5_ci = compute_bootstrap_ci([t * 100.0 for t in top5_hits], n_bootstraps=1000)
         key_inv_ci = compute_bootstrap_ci(key_inv_dtw_norm_list, n_bootstraps=1000)
+        dfw_dtw_ci = compute_bootstrap_ci(dfw_dtw_norm_list, n_bootstraps=1000)
+        hz_exact_ci = compute_bootstrap_ci(hz_exact_norm_list, n_bootstraps=1000)
+        hz_dfw_ci = compute_bootstrap_ci(hz_dfw_dtw_norm_list, n_bootstraps=1000)
 
         # Binary Classification Grid Search (Table 3)
         pairwise_lcs = []
@@ -576,7 +587,12 @@ def run_phase3_classification_reporting(
             "raw_dtw_norm": avg_exact_norm,
             "key_inv_dtw_norm": avg_key_inv_norm,
             "key_inv_dtw_norm_ci95": key_inv_ci,
+            "dfw_dtw_norm": avg_dfw_dtw_norm,
+            "dfw_dtw_norm_ci95": dfw_dtw_ci,
             "hz_dtw_norm": avg_hz_exact_norm,
+            "hz_dtw_norm_ci95": hz_exact_ci,
+            "hz_dfw_dtw_norm": avg_hz_dfw_dtw_norm,
+            "hz_dfw_dtw_norm_ci95": hz_dfw_ci,
             "num_pairs": len(nlcs_scores),
             "table3_metrics": best_metrics
         }
@@ -589,27 +605,28 @@ def run_phase3_classification_reporting(
 
     # Determine best values for bolding in Table 2
     best_nlcs_val = max(res['nlcs_percent'] for res in benchmark_results.values())
-    best_dtw_val = min(res['key_inv_dtw_norm'] for res in benchmark_results.values())
+    best_hz_dfw_val = min(res['hz_dfw_dtw_norm'] for res in benchmark_results.values())
     best_mrr_val = max(res['mrr_percent'] for res in benchmark_results.values())
     best_top5_val = max(res['top5_percent'] for res in benchmark_results.values())
 
     # Generate LaTeX Table 2
     latex_table2_path = output_dir / "ciarp2_table2_results.tex"
     with open(latex_table2_path, "w", encoding="utf-8") as f:
-        f.write("% CIARP2 Table 2: CSI Performance Across Melodic Extraction Methods (Time & Frequency Aligned DTW)\n")
+        f.write("% CIARP2 Table 2: CSI Performance Across Melodic Extraction Methods (DTW-DFW)\n")
         f.write("\\begin{table}[h!]\n\\centering\n")
-        f.write("\\caption{CSI Performance Across Melodic Extraction Methods with Time-Frequency Aligned DTW.}\n")
+        f.write("\\caption{CSI Performance Across Melodic Extraction Methods.}\n")
         f.write("\\label{tab:ciarp2_table2}\n")
         f.write("\\begin{tabular}{|l|c|c|c|c|}\n\\hline\n")
-        f.write("\\textbf{Method} & \\textbf{Avg. NLCS (\\%)} & \\textbf{DTW (Time-Freq Aligned)} & \\textbf{MRR (\\%)} & \\textbf{Top-5 (\\%)} \\\\\n\\hline\n")
+        f.write("\\textbf{Method} & \\textbf{Avg. NLCS (\\%)} & \\textbf{DTW-DFW} & \\textbf{MRR (\\%)} & \\textbf{Top-5 (\\%)} \\\\\n\\hline\n")
         for m, res in benchmark_results.items():
             disp = res['display_name']
             
             nlcs_val = res['nlcs_percent']
             nlcs_str = f"\\textbf{{{nlcs_val:.2f}}}" if abs(nlcs_val - best_nlcs_val) < 1e-4 else f"{nlcs_val:.2f}"
             
-            dtw_val = res['key_inv_dtw_norm']
-            dtw_str = f"\\textbf{{{dtw_val:.2f}}}" if abs(dtw_val - best_dtw_val) < 1e-4 else f"{dtw_val:.2f}"
+            dfw_val = res['hz_dfw_dtw_norm']
+            dfw_val_str = f"\\textbf{{{dfw_val:.2f}}}" if abs(dfw_val - best_hz_dfw_val) < 1e-4 else f"{dfw_val:.2f}"
+            dfw_str = f"{dfw_val_str} [{res['hz_dfw_dtw_norm_ci95'][0]:.1f}, {res['hz_dfw_dtw_norm_ci95'][1]:.1f}]"
             
             mrr_val = res['mrr_percent']
             mrr_val_str = f"\\textbf{{{mrr_val:.2f}}}" if abs(mrr_val - best_mrr_val) < 1e-4 else f"{mrr_val:.2f}"
@@ -619,7 +636,7 @@ def run_phase3_classification_reporting(
             top5_val_str = f"\\textbf{{{top5_val:.2f}}}" if abs(top5_val - best_top5_val) < 1e-4 else f"{top5_val:.2f}"
             top5_str = f"{top5_val_str} [{res['top5_ci95'][0]:.1f}, {res['top5_ci95'][1]:.1f}]"
             
-            f.write(f"{disp} & {nlcs_str} & {dtw_str} & {mrr_str} & {top5_str} \\\\\n")
+            f.write(f"{disp} & {nlcs_str} & {dfw_str} & {mrr_str} & {top5_str} \\\\\n")
         f.write("\\hline\n\\end{tabular}\n\\end{table}\n")
 
     # Generate LaTeX Table 3
@@ -646,19 +663,19 @@ def run_phase3_classification_reporting(
     # Save ASCII summary table
     txt_table_path = output_dir / "ciarp2_summary_table.txt"
     lines = []
-    lines.append("=" * 140)
-    lines.append("CIARP2 BENCHMARK SUMMARY TABLE 2 (TIME & FREQUENCY ALIGNED DTW)")
-    lines.append("=" * 140)
-    lines.append(f"{'Method':<20} | {'Avg. NLCS (%) [95% CI]':<26} | {'DTW (Time-Freq Aligned) [95% CI]':<36} | {'MRR (%) [95% CI]':<22} | {'Top-5 (%) [95% CI]':<22}")
-    lines.append("-" * 140)
+    lines.append("=" * 135)
+    lines.append("CIARP2 BENCHMARK SUMMARY TABLE 2 (TIME & FREQUENCY ALIGNED DTW-DFW)")
+    lines.append("=" * 135)
+    lines.append(f"{'Method':<20} | {'Avg. NLCS (%) [95% CI]':<26} | {'DTW-DFW [95% CI]':<26} | {'MRR (%) [95% CI]':<22} | {'Top-5 (%) [95% CI]':<22}")
+    lines.append("-" * 135)
     for m, res in benchmark_results.items():
         disp = res['display_name']
         nlcs_s = f"{res['nlcs_percent']:.2f} [{res['nlcs_ci95'][0]:.1f}, {res['nlcs_ci95'][1]:.1f}]"
-        dtw_s = f"{res['key_inv_dtw_norm']:.2f} [{res['key_inv_dtw_norm_ci95'][0]:.1f}, {res['key_inv_dtw_norm_ci95'][1]:.1f}]"
+        dfw_s = f"{res['hz_dfw_dtw_norm']:.2f} [{res['hz_dfw_dtw_norm_ci95'][0]:.1f}, {res['hz_dfw_dtw_norm_ci95'][1]:.1f}]"
         mrr_s = f"{res['mrr_percent']:.2f} [{res['mrr_ci95'][0]:.1f}, {res['mrr_ci95'][1]:.1f}]"
         top5_s = f"{res['top5_percent']:.2f} [{res['top5_ci95'][0]:.1f}, {res['top5_ci95'][1]:.1f}]"
-        lines.append(f"{disp:<20} | {nlcs_s:<26} | {dtw_s:<36} | {mrr_s:<22} | {top5_s:<22}")
-    lines.append("=" * 140)
+        lines.append(f"{disp:<20} | {nlcs_s:<26} | {dfw_s:<26} | {mrr_s:<22} | {top5_s:<22}")
+    lines.append("=" * 135)
     
     lines.append("\n" + "=" * 95)
     lines.append("CIARP2 BENCHMARK SUMMARY TABLE 3 (BINARY CLASSIFICATION)")
