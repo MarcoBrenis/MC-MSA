@@ -24,6 +24,7 @@ DEFAULT_ENERGY_TAU = 0.30         # τ_E: Energy threshold for cadence resolutio
 from src.melody_analysis_v2.classifier_thesis import calculate_lcs
 from src.melody_analysis_v2.segmenter import MelodySegment
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
+from src.melody_analysis_v2.dtw_utils import compute_dtw_distance
 from src.melody_analysis_v2.visualization import (
     plot_boundary_detection, 
     plot_self_similarity, 
@@ -1302,18 +1303,12 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
                         if "dtw_distance" in cached_entry and cached_entry["dtw_distance"] != "":
                             dtw_val = cached_entry["dtw_distance"]
                         else:
-                            f0_orig = np.nan_to_num(np.where(pitch_o > 0, 440.0 * np.power(2.0, (pitch_o - 69.0) / 12.0), 0))
                             try:
-                                # Downsample f0 trajectories to max 1500 frames for memory-efficient DTW (prevents OOM/SIGKILL)
-                                max_dtw_len = 1500
-                                step_c = max(1, len(f0_cover) // max_dtw_len)
-                                step_o = max(1, len(f0_orig) // max_dtw_len)
-                                f0_cover_ds = f0_cover[::step_c]
-                                f0_orig_ds = f0_orig[::step_o]
-                                    
-                                D, wp = librosa.sequence.dtw(f0_cover_ds.reshape(1, -1), f0_orig_ds.reshape(1, -1))
-                                dtw_val = D[-1, -1] / len(wp)
-                            except:
+                                dtw_res = compute_dtw_distance(pitch_c, pitch_o)
+                                dtw_val = dtw_res.get("hz_dfw_dtw_norm", 999.0)
+                                if dtw_val >= 990:
+                                    dtw_val = -1.0
+                            except Exception:
                                 dtw_val = -1.0
                             cached_entry["dtw_distance"] = dtw_val if dtw_val >= 0 else ""
                             cache_updated = True

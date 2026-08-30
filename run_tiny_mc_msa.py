@@ -8,6 +8,7 @@ import librosa
 import matplotlib.pyplot as plt
 
 from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierThesis, MelodyFeatures, MelodySegmentAnnotation
+from src.melody_analysis_v2.dtw_utils import compute_dtw_distance
 from src.melody_analysis_v2.classifier_thesis import calculate_lcs
 from src.melody_analysis_v2.segmenter import MelodySegment
 from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
@@ -215,12 +216,15 @@ def main():
                 
                 dtw_val = 0.0
                 pitch_o = res_originals[uid_cover].features.pitch_midi
-                f0_orig = np.nan_to_num(np.where(pitch_o > 0, 440.0 * np.power(2.0, (pitch_o - 69.0) / 12.0), 0))
                 try:
-                    D, wp = librosa.sequence.dtw(f0_cover.reshape(1, -1), f0_orig.reshape(1, -1))
-                    dtw_val = D[-1, -1] / len(wp)
-                    dtw_correct_list.append(dtw_val)
-                except: pass
+                    dtw_res = compute_dtw_distance(pitch_midi_c, pitch_o)
+                    dtw_val = dtw_res.get("hz_dfw_dtw_norm", 999.0)
+                    if dtw_val < 990:
+                        dtw_correct_list.append(dtw_val)
+                    else:
+                        dtw_val = -1.0
+                except Exception:
+                    dtw_val = -1.0
                 
                 detailed_results.append(f"ID {uid_cover:02d} | LCS: {true_sim:.4f} | Rank: {rank:2d} | DTW: {dtw_val:.4f}")
                     

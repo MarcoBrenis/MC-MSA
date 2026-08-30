@@ -24,6 +24,7 @@ from .visualization import (
     plot_spectrogram_with_segments,
 )
 from .exporter import DiagramExporter, export_diagram_images
+from .dtw_utils import dynamic_frequency_warping, compute_dtw_distance
 
 __all__ = [
     "MelodyFeatures",
@@ -57,4 +58,6 @@ __all__ = [
     "plot_spectrogram_with_segments",
     "DiagramExporter",
     "export_diagram_images",
+    "dynamic_frequency_warping",
+    "compute_dtw_distance",
 ]
