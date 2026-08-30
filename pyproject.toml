@@ -9,26 +9,29 @@ description = "Herramientas para segmentar y clasificar la estructura melódica"
 authors = [{name = "Music Analyst"}]
 requires-python = ">=3.10"
 dependencies = [
-    "numpy",
-    "scipy",
-    "librosa",
-    "soundfile",
-    "matplotlib",
-    "crepe",
+    "numpy>=1.23.0",
+    "scipy>=1.9.0",
+    "librosa>=0.10.0",
+    "soundfile>=0.12.1",
+    "matplotlib>=3.6.0",
+    "pandas>=2.0.0",
+    "scikit-learn>=1.2.0",
+    "tqdm>=4.65.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
-optuna = ["optuna"]
+dev = ["pytest>=7.0.0"]
+optuna = ["optuna>=3.0.0"]
 advanced = [
-    "torch",
-    "torchaudio",
-    "demucs",
-    "onnxruntime",
-    "basic-pitch",
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+    "crepe>=0.0.12",
+    "demucs>=4.0.0",
+    "onnxruntime>=1.15.0",
+    "basicpitch>=0.2.4",
     "bs-roformer-infer",
     "ml-collections",
-    "pyyaml",
+    "pyyaml>=6.0",
 ]
 
 [tool.pytest.ini_options]

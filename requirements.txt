@@ -1,0 +1,26 @@
+# MC-MSA v2.5 Requirements & Dependencies
+# Fully compatible with Python >=3.10 on macOS and Linux
+
+# Core Audio Processing & Science
+numpy>=1.24.0
+scipy>=1.9.0
+librosa>=0.10.0
+soundfile>=0.12.1
+matplotlib>=3.6.0
+pandas>=2.0.0
+scikit-learn>=1.2.0
+tqdm>=4.65.0
+optuna>=3.0.0
+
+# Deep Learning Frameworks & Neural Pitch Extractors
+torch>=2.0.0
+torchaudio>=2.0.0
+onnxruntime>=1.15.0
+demucs>=4.0.0
+pyyaml>=6.0
+ml-collections>=0.1.1
+
+# Optional TensorFlow Pitch Extractors (Python <3.12 environments)
+basic-pitch>=0.2.0; python_version < "3.12"
+crepe>=0.0.12; python_version < "3.12"
+tensorflow>=2.12.0; python_version < "3.12"
