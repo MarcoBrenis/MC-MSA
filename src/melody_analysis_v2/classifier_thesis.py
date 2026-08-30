@@ -126,7 +126,7 @@ def calculate_lcs(seq1: List[str], seq2: List[str]) -> float:
     return 2.0 * prev[m] / (n + m)
 
 
-# Alias definitions for CIARP 2026 / CLEI paper classifier compatibility
+# Alias definitions for CIARP 2026 paper classifier compatibility
 MelodyClassifierCIARP = MelodyClassifierThesis
 MelodyClassifierPaper = MelodyClassifierThesis
 

@@ -67,7 +67,7 @@ def main() -> None:
     # --- Classifier Configuration ---
     print("\nChoose classifier:")
     print("1. Standard (Full Caplin: Antecedent, Consequent, Presentation, etc.)")
-    print("2. CLEI Paper (Strict A, C, X)")
+    print("2. CIARP Paper (Strict A, C, X)")
     op_clf = input("Option [1/2] (default 1): ").strip()
     
     if op_clf == "2":

@@ -2,8 +2,7 @@
 MC-MSA CIARP 2026 Paper Benchmark Runner
 =========================================
 Runs the Melody-Centered Music Structure Analysis (MC-MSA) pipeline strictly according
-to the specifications, parameters, and algorithms published in the CIARP 2026 paper
-(formerly CLEI 2026: "MC-MSA: Melody-Centered Music Structure Analysis Approach").
+to the specifications, parameters, and algorithms published in the CIARP 2026 paper: "MC-MSA: Melody-Centered Music Structure Analysis Approach".
 
 Paper Reference Specifications:
 -------------------------------

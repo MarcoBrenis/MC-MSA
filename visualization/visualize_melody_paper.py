@@ -1,4 +1,4 @@
-"""Analysis of a single melody using the CLEI Paper Classifier (A/C/X logic)."""
+"""Analysis of a single melody using the CIARP Paper Classifier (A/C/X logic)."""
 
 from pathlib import Path
 import sys
@@ -73,7 +73,7 @@ def main() -> None:
         print(f"Error during analysis: {exc}")
         sys.exit(1)
  
-    print("\nClassified segments (CLEI Paper - Q/A/Silence):")
+    print("\nClassified segments (CIARP Paper - Q/A/Silence):")
     for segmento in resultado.segments:
         print(f"{segmento.label:>5} | {segmento.segment.start_time:7.3f} → {segmento.segment.end_time:7.3f} s | {segmento.descriptor}")
  
