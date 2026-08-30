@@ -491,7 +491,7 @@ def process_defaults(base_path):
         dir_popular = base_path / "dataset_OA"
         
     print(f"\nProcessing Popular Corpus from: {dir_popular.name}...")
-    popular_ok = extract_dataset_to_csv(dir_popular, is_academic=False, csv_path="dataset_popular.csv")
+    popular_ok = extract_dataset_to_csv(dir_popular, is_academic=False, csv_path="datasets/dataset_popular.csv")
     
     if popular_ok:
         texto_popular = (
@@ -501,7 +501,7 @@ def process_defaults(base_path):
             "acoustic covers is available. The playlist can be accessed by scanning the QR code at the end of this appendix."
         )
         generate_latex_table(
-            csv_path="dataset_popular.csv", 
+            csv_path="datasets/dataset_popular.csv", 
             output_path="tabla_popular.tex",
             section_title="Popular Music Stress-Test Corpus (80 Pairs)",
             table_label="tab:popular_corpus",
@@ -511,7 +511,7 @@ def process_defaults(base_path):
     # --- ACADEMIC CORPUS ---
     dir_academico = base_path / "dataset_Acad"
     print(f"\nProcessing Academic Corpus from: {dir_academico.name}...")
-    academico_ok = extract_dataset_to_csv(dir_academico, is_academic=True, csv_path="dataset_academic.csv")
+    academico_ok = extract_dataset_to_csv(dir_academico, is_academic=True, csv_path="datasets/dataset_academic.csv")
     
     if academico_ok:
         texto_academico = (
@@ -519,7 +519,7 @@ def process_defaults(base_path):
             "used to establish the theoretical ground truth for William E. Caplin's formal functions."
         )
         generate_latex_table(
-            csv_path="dataset_academic.csv", 
+            csv_path="datasets/dataset_academic.csv", 
             output_path="tabla_academica.tex",
             section_title="Academic Baseline Corpus (73 Pairs)",
             table_label="tab:academic_corpus",

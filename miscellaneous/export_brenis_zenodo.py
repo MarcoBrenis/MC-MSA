@@ -80,7 +80,7 @@ def export_dataset():
         return
         
     # Read the popular metadata csv
-    metadata_in_path = base_dir / "dataset_popular.csv"
+    metadata_in_path = (base_dir.parent / "datasets" / "dataset_popular.csv") if (base_dir.parent / "datasets").exists() else (base_dir / "datasets" / "dataset_popular.csv")
     if not metadata_in_path.exists():
         print(f"Error: {metadata_in_path} not found.")
         return

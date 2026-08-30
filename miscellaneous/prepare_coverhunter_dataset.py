@@ -61,9 +61,9 @@ def main():
     # Determinar qué archivo CSV/metadata corresponde
     metadata_csv = None
     if "popular" in selected_dataset.lower() or "oa" in selected_dataset.lower():
-        metadata_csv = base_dir / "dataset_popular.csv"
+        metadata_csv = base_dir.parent / "datasets" / "dataset_popular.csv" if (base_dir.parent / "datasets").exists() else base_dir / "datasets" / "dataset_popular.csv"
     elif "academic" in selected_dataset.lower() or "acad" in selected_dataset.lower():
-        metadata_csv = base_dir / "dataset_academic.csv"
+        metadata_csv = base_dir.parent / "datasets" / "dataset_academic.csv" if (base_dir.parent / "datasets").exists() else base_dir / "datasets" / "dataset_academic.csv"
     else:
         # Buscar cualquier csv en el directorio base
         csvs = list(base_dir.glob("*.csv"))
