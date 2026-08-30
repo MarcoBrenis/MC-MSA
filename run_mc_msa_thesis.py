@@ -1,1117 +1,208 @@
 #!/usr/bin/env python3
 """
-MC-MSA Thesis Benchmarking Evaluation Pipeline
+MC-MSA Thesis Empirical Parameter Sweep Runner
 -----------------------------------------------
-Main evaluation runner script for the MC-MSA framework thesis experiments.
-Integrates automatic segmentation, formal Caplin function classification (MelodyClassifierThesis),
-and standardized Matsumoto (1987) DTW-DFW time-frequency alignment metrics.
+Evaluates the MC-MSA framework across custom literature-defined/thesis hyperparameters
+and saves detailed run results to text/CSV files for subsequent analysis.
+
+Target Hyperparameters:
+- L = 8 (Radius of the 2D Gaussian checkerboard kernel)
+- σ = 2 (Standard deviation for 1D Gaussian smoothing)
+- τ_peak = 0.20 (Minimum peak height threshold relative to global max)
+- y = 0.20 (20% final portion of segment used for functional classification)
+- θ_slope = ±0.15 (Pitch slope thresholds for detecting ascending/descending contours)
+- τ_E = [0.3, 0.15] (Normalized energy thresholds for detecting sustained intensity or drop)
+
+Supports running sweeps across single or multiple energy thresholds while caching
+intermediate feature representations for high performance.
 """
+
 import os
-import re
-import json
+import sys
 import argparse
 import gc
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, message=".*pkg_resources.*")
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+import json
+import itertools
 from pathlib import Path
 import numpy as np
+
+# Ensure root src is in python path
+current_dir = Path(__file__).parent.absolute()
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
+
 import librosa
-import matplotlib.pyplot as plt
-
-from src.melody_analysis_v2 import MelodyAnalyzer, MelodyClassifierThesis, MelodyFeatures, MelodySegmentAnnotation, DiagramExporter
-
-# Default Baseline Hyperparameters for Single Execution (Single Source of Truth)
-DEFAULT_CHECKERBOARD_RADIUS = 8    # L: 2D Gaussian kernel radius
-DEFAULT_KERNEL_SIZE = 2           # σ: 1D Gaussian smoothing standard deviation
-DEFAULT_PEAK_THRESHOLD = 0.20     # τ_peak: Peak threshold for novelty curve
-DEFAULT_MIN_SEPARATION = 10       # d_min: Minimum boundary separation
-DEFAULT_TAIL_PROPORTION = 0.20    # L_tail (p): Tail proportion for classification
-DEFAULT_SLOPE_EPSILON = 0.15      # ε_slope: F0 slope threshold
-DEFAULT_ENERGY_TAU = 0.30         # τ_E: Energy threshold for cadence resolution
-from src.melody_analysis_v2.classifier_thesis import calculate_lcs
-from src.melody_analysis_v2.segmenter import MelodySegment
-from src.melody_analysis_v2.pipeline import MelodyAnalysisResult
-from src.melody_analysis_v2.dtw_utils import compute_dtw_distance
-from src.melody_analysis_v2.visualization import (
-    plot_boundary_detection, 
-    plot_self_similarity, 
-    plot_spectrogram_with_segments
+from src.melody_analysis_v2 import (
+    MelodyAnalyzer,
+    MelodySegmenter,
+    MelodyClassifierThesis
 )
+from run_mc_msa import (
+    calculate_lcs,
+    get_audio_files,
+    pair_files_fuzzy,
+    find_available_datasets,
+    safe_json,
+    evaluate_binary_classification,
+    normalize_label
+)
+from src.melody_analysis_v2.segmenter import MelodySegmenter, MelodySegment
+from src.melody_analysis_v2.features import MelodyFeatures
 
-# Baseline Single-Value Hyperparameters for Standard MC-MSA Execution (Single Source of Truth)
-DEFAULT_RADIUS = 8                # L: 2D Gaussian kernel radius
-DEFAULT_KERNEL_SIZE = 2           # σ: 1D Gaussian smoothing standard deviation
-DEFAULT_PEAK_THRESHOLD = 0.20     # τ_peak: Peak threshold for novelty curve
-DEFAULT_MIN_SEPARATION = 10       # d_min: Minimum boundary separation
-DEFAULT_TAIL_PROPORTION = 0.20    # L_tail (p): Tail proportion for classification
-DEFAULT_SLOPE_EPSILON = 0.15      # ε_slope: F0 slope threshold
-DEFAULT_ENERGY_TAU = 0.30         # τ_E: Energy threshold for cadence resolution
 
-METHOD_CLASSIFICATION = {
-    'pyin': 'Fundamental Frequency (F0 Extractor)',
-    'yin': 'Fundamental Frequency (F0 Extractor)',
-    'crepe': 'Fundamental Frequency (F0 Extractor)',
-    'rmvpe': 'Fundamental Frequency (F0 Extractor)',
-    'spice': 'Fundamental Frequency (F0 Extractor)',
-    'jdc': 'Fundamental Frequency (F0 Extractor)',
-    'fcn_f0': 'Fundamental Frequency (F0 Extractor)',
-    'melodia': 'Melody Extractor (Melody Extractor - Salamon)',
-    'demucs_crepe': 'Melody Extractor (Melody Extractor - Demucs+CREPE)',
-    'bs_roformer_rmvpe': 'Melody Extractor (Melody Extractor - Roformer+RMVPE)',
-    'bs_roformer': 'Melody Extractor (Melody Extractor - Roformer+RMVPE)',
-    'demucs': 'Melody Extractor (Melody Extractor - Demucs+CREPE)',
-    'bs_roformer_crepe': 'Melody Extractor (Melody Extractor - Roformer+CREPE)',
-    'demucs_rmvpe': 'Melody Extractor (Melody Extractor - Demucs+RMVPE)',
-    'basic_pitch': 'Melody Extractor (Melody Extractor - Spotify Basic Pitch)',
-    'tachibana': 'Melody Extractor (Melody Extractor - Tachibana HPSS+Melodia)',
-    'poliner': 'Melody Extractor (Melody Extractor - Poliner & Ellis STFT Peak)',
-    'durrieu': 'Melody Extractor (Melody Extractor - Durrieu NMF+YIN)',
-    'ensemble': 'Hybrid (Ensemble F0/Melody)',
-    'tesis': 'Métodos Selección Tesis (YIN, pYIN, Melodia, SPICE, CREPE, RMVPE, FCN-f0, Demucs+CREPE)',
-    'all_f0': 'All F0 extractors',
-    'all_melody': 'All Melody extractors',
-    'all': 'All methods'
-}
+# Default Hyperparameter Search Ranges for Empirical Grid Search (Single Source of Truth)
+DEFAULT_RADII = [4, 6, 8, 10, 12]                         # L: 2D Gaussian kernel radius
+DEFAULT_KERNEL_SIZES = [2, 3, 4, 5, 6]                    # σ: 1D Gaussian smoothing
+DEFAULT_PEAK_THRESHOLDS = [0.10, 0.15, 0.20, 0.25, 0.30]  # τ_peak: Peak threshold
+DEFAULT_MIN_SEPARATIONS = [10, 20, 30, 40, 50]            # d_min: Min boundary separation
+DEFAULT_TAIL_PROPORTIONS = [0.10, 0.15, 0.20, 0.25, 0.30] # L_tail (p): Tail proportion
+DEFAULT_SLOPE_EPSILONS = [0.05, 0.10, 0.15, 0.20, 0.30]   # ε_slope: F0 slope threshold
+DEFAULT_ENERGY_TAUS = [0.15, 0.20, 0.30, 0.40, 0.50]      # τ_E: Energy threshold
 
-def get_audio_files(directory_path: Path, match_mode: str = "id"):
-    result = {}
-    if not directory_path.exists():
-        return result
-    for f in directory_path.iterdir():
-        if f.is_file() and f.suffix.lower() in ['.mp3', '.wav']:
-            if match_mode == "stem":
-                # Normalize the file stem
-                name = f.stem.lower()
-                # Remove common suffixes
-                name = re.sub(r'[-_](cover|originales|original|orig|ref|covers|version|var)', '', name)
-                # Remove numeric prefixes if present
-                name = re.sub(r'^\d+\s*[-_]?\s*', '', name)
-                # Keep only alphanumeric characters
-                name = re.sub(r'[^a-z0-9]', '', name)
-                key = name.strip()
-                if key:
-                    result[key] = f
-            elif match_mode == "fuzzy":
-                # Save by full name (guaranteed unique)
-                result[f.name] = f
-            else: # "id"
-                match = re.search(r'^(\d+)', f.name)
-                if match:
-                    file_id = int(match.group(1))
-                    result[file_id] = f
-    return result
 
-def pair_files_fuzzy(orig_files: dict[str, Path], cover_files: dict[str, Path]) -> tuple[dict[int, Path], dict[int, Path]]:
-    """
-    Pairs originals and covers using prefix extraction and fuzzy name matching.
-    Returns two dictionaries mapping a unique numeric index (1 to N) to paired Paths.
-    """
-    paired_orig = {}
-    paired_cover = {}
+def load_features_fast(analyzer, file_path, method, cache_dir):
+    method_dir = cache_dir / method
+    cache_path = method_dir / f"{file_path.stem}.json"
     
-    # 1. Group by numeric prefix (or group 0 by default)
-    def get_prefix_and_text(filename: str):
-        match = re.match(r'^(\d+)\s*[-_]?\s*(.*)', filename)
-        if match:
-            return int(match.group(1)), match.group(2)
-        return 0, filename
-        
-    orig_by_prefix = {}
-    cover_by_prefix = {}
-    
-    for name, path in orig_files.items():
-        prefix, text = get_prefix_and_text(name)
-        orig_by_prefix.setdefault(prefix, []).append((text, path))
-            
-    for name, path in cover_files.items():
-        prefix, text = get_prefix_and_text(name)
-        cover_by_prefix.setdefault(prefix, []).append((text, path))
-            
-    # 2. Match for each prefix
-    pair_id = 1
-    
-    def word_overlap(str1: str, str2: str) -> float:
-        w1 = set(re.findall(r'[a-zA-Z0-9]+', str1.lower()))
-        w2 = set(re.findall(r'[a-zA-Z0-9]+', str2.lower()))
-        # Remove common stopwords
-        stopwords = {'cover', 'covers', 'original', 'originales', 'orig', 'ref', 'version', 'mp3', 'wav'}
-        w1 = w1 - stopwords
-        w2 = w2 - stopwords
-        if not w1 or not w2:
-            return 0.0
-        return len(w1.intersection(w2)) / len(w1.union(w2))
-        
-    for prefix in sorted(orig_by_prefix.keys()):
-        if prefix in cover_by_prefix:
-            orig_list = orig_by_prefix[prefix]
-            cover_list = cover_by_prefix[prefix]
-            
-            used_origs = set()
-            for cov_text, cov_path in cover_list:
-                best_overlap = -1.0
-                best_orig_path = None
-                
-                for orig_text, orig_path in orig_list:
-                    if orig_path in used_origs:
-                        continue
-                    overlap = word_overlap(cov_text, orig_text)
-                    if overlap > best_overlap:
-                        best_overlap = overlap
-                        best_orig_path = orig_path
-                        
-                if best_orig_path is not None and best_overlap > 0.0:
-                    paired_orig[pair_id] = best_orig_path
-                    paired_cover[pair_id] = cov_path
-                    used_origs.add(best_orig_path)
-                    pair_id += 1
-                    
-    return paired_orig, paired_cover
+    if not cache_path.exists() and method_dir.exists():
+        prefix = file_path.stem.split(" - ")[0] if " - " in file_path.stem else file_path.stem
+        matches = [
+            p for p in method_dir.glob(f"{prefix}*.json")
+            if not p.name.endswith(".tiny.json") and not p.name.startswith("comparison_cache")
+        ]
+        if matches:
+            cache_path = matches[0]
 
-def calculate_levenshtein_similarity(seq1, seq2) -> float:
-    """Calculates normalized Levenshtein similarity between two label sequences."""
-    n, m = len(seq1), len(seq2)
-    if n == 0 and m == 0:
-        return 1.0
-    if n == 0 or m == 0:
-        return 0.0
-    
-    dp = [[0] * (m + 1) for _ in range(n + 1)]
-    for i in range(n + 1):
-        dp[i][0] = i
-    for j in range(m + 1):
-        dp[0][j] = j
-        
-    for i in range(1, n + 1):
-        for j in range(1, m + 1):
-            if seq1[i-1] == seq2[j-1]:
-                dp[i][j] = dp[i-1][j-1]
-            else:
-                dp[i][j] = min(
-                    dp[i-1][j] + 1,    # Deletion
-                    dp[i][j-1] + 1,    # Insertion
-                    dp[i-1][j-1] + 1   # Substitution
-                )
-    distance = dp[n][m]
-    max_len = max(n, m)
-    return 1.0 - (distance / max_len)
-
-def calculate_pitch_histogram_similarity(pitch1, pitch2) -> float:
-    """Calculates cosine similarity of pitch class histograms (chroma)."""
-    p1_valid = pitch1[~np.isnan(pitch1) & (pitch1 > 0)]
-    p2_valid = pitch2[~np.isnan(pitch2) & (pitch2 > 0)]
-    
-    hist1 = np.zeros(12)
-    hist2 = np.zeros(12)
-    
-    if len(p1_valid) > 0:
-        classes1 = np.round(p1_valid).astype(int) % 12
-        for pc in classes1:
-            hist1[pc] += 1
-        norm1 = np.linalg.norm(hist1)
-        if norm1 > 0:
-            hist1 = hist1 / norm1
-            
-    if len(p2_valid) > 0:
-        classes2 = np.round(p2_valid).astype(int) % 12
-        for pc in classes2:
-            hist2[pc] += 1
-        norm2 = np.linalg.norm(hist2)
-        if norm2 > 0:
-            hist2 = hist2 / norm2
-            
-    if np.linalg.norm(hist1) == 0 or np.linalg.norm(hist2) == 0:
-        return 0.0
-        
-    return float(np.dot(hist1, hist2))
-
-def evaluate_binary_classification(pairwise_results, metric_name, lower_is_better=False):
-    """Evaluates binary classification for a given metric over a range of thresholds."""
-    valid_results = [r for r in pairwise_results if r[0] is not None and r[0] >= 0]
-    if not valid_results:
-        return 0.0, None, []
-        
-    values = [r[0] for r in valid_results]
-    min_val, max_val = min(values), max(values)
-    
-    if lower_is_better:
-        thresholds = np.linspace(min_val, max_val, 21)
-    else:
-        thresholds = np.linspace(0.0, 1.0, 21)
-        
-    best_f1 = -1.0
-    best_thresh = 0.0
-    best_metrics = {}
-    curves = []
-    
-    for t in thresholds:
-        tp, fp, fn, tn = 0, 0, 0, 0
-        for val, is_correct in valid_results:
-            if lower_is_better:
-                pred_positive = (val <= t)
-            else:
-                pred_positive = (val >= t)
-                
-            if pred_positive:
-                if is_correct:
-                    tp += 1
-                else:
-                    fp += 1
-            else:
-                if is_correct:
-                    fn += 1
-                else:
-                    tn += 1
-                    
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = 2.0 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-        accuracy = (tp + tn) / (tp + tn + fp + fn) if (tp + tn + fp + fn) > 0 else 0.0
-        fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
-        fnr = fn / (fn + tp) if (fn + tp) > 0 else 0.0
-        
-        curves.append({
-            "threshold": t,
-            "tp": tp,
-            "fp": fp,
-            "fn": fn,
-            "tn": tn,
-            "precision": precision,
-            "recall": recall,
-            "f1_score": f1,
-            "accuracy": accuracy,
-            "fpr": fpr,
-            "fnr": fnr
-        })
-        
-        if f1 > best_f1:
-            best_f1 = f1
-            best_thresh = t
-            best_metrics = {
-                "precision": precision,
-                "recall": recall,
-                "f1_score": f1,
-                "accuracy": accuracy,
-                "fpr": fpr,
-                "fnr": fnr,
-                "tp": tp,
-                "fp": fp,
-                "fn": fn,
-                "tn": tn
-            }
-            
-    return best_thresh, best_metrics, curves
-
-
-def normalize_label(label: str) -> str:
-    l = label.strip().lower()
-    if l in ['pregunta', 'antecedent', 'a', 'q', 'question']:
-        return 'Antecedent'
-    elif l in ['respuesta', 'consequent', 'c', 'r', 'answer']:
-        return 'Consequent'
-    elif l in ['silencio', 'silence', 'x', 's']:
-        return 'Silence'
-    return label
-
-
-def safe_json(o):
-    if isinstance(o, (np.bool_, bool)):
-        return bool(o)
-    if isinstance(o, np.integer):
-        return int(o)
-    if isinstance(o, np.floating):
-        return float(o)
-    if isinstance(o, np.ndarray):
-        return o.tolist()
-    return str(o)
-
-
-def load_or_analyze(analyzer, file_path, method, cache_dir):
-    cache_path = cache_dir / method / f"{file_path.stem}.json"
-    if cache_path.exists():
-        try:
-            with open(cache_path, 'r') as f:
-                data = json.load(f)
-            
-            features = MelodyFeatures.from_dict(data)
-            # Re-run segmentation and classification dynamically using the cached features
-            result = analyzer.analyze_features(features)
-            for s in result.segments:
-                s.label = normalize_label(s.label)
-            # Save updated classifications back to cache JSON
-            with open(cache_path, 'w') as f:
-                json.dump(result.to_dict(), f, default=safe_json)
-            return result
-        except Exception:
-            pass
-    
-    result = analyzer.analyze_file(str(file_path))
-    for s in result.segments:
-        s.label = normalize_label(s.label)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(cache_path, 'w') as f:
-        json.dump(result.to_dict(), f, default=safe_json)
-    return result
-
-def load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=""):
-    cache_dir_method = cache_dir / method
-    tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
-    
-    if tiny_path.exists():
-        try:
-            with open(tiny_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return {
-                'seq': data['seq'],
-                'pitch_midi': np.array(data['pitch_midi'], dtype=np.float32)
-            }
-        except Exception:
-            pass
-
-    cache_path = cache_dir_method / f"{file_path.stem}.json"
-    if cache_path.exists():
+    if cache_path and cache_path.exists():
         try:
             with open(cache_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            seq = [s.get('label', '') for s in data.get('segments', [])]
-            pitch_midi = np.array(data.get('pitch_midi', []), dtype=np.float32)
+            feat = MelodyFeatures.from_dict(data)
+            del data
+            return feat, cache_path
+        except Exception as e:
+            print(f"Warning loading cache for {file_path.name}: {e}, re-analyzing...")
             
-            tiny_data = {
-                'seq': seq,
-                'pitch_midi': pitch_midi.tolist()
-            }
-            try:
-                tiny_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(tiny_path, 'w', encoding='utf-8') as f:
-                    json.dump(tiny_data, f, default=safe_json)
-            except Exception:
-                pass
+    if analyzer is None:
+        analyzer = MelodyAnalyzer(extraction_method=method)
+    res = analyzer.analyze_file(str(file_path))
+    target_p = method_dir / f"{file_path.stem}.json"
+    target_p.parent.mkdir(parents=True, exist_ok=True)
+    with open(target_p, 'w', encoding='utf-8') as f:
+        json.dump(res.to_dict(), f, default=safe_json)
+    feat = res.features
+    del res
+    gc.collect()
+    return feat, target_p
 
-            return {
-                'seq': seq,
-                'pitch_midi': pitch_midi
-            }
+
+def load_or_compute_ssm(feat: MelodyFeatures, file_path: Path, method: str, cache_dir: Path) -> np.ndarray:
+    method_dir = cache_dir / method
+    ssm_path = method_dir / f"{file_path.stem}.ssm.npy"
+    
+    if ssm_path.exists():
+        try:
+            return np.load(ssm_path)
         except Exception:
             pass
 
-    # If neither tiny nor normal cache exists, run subprocess
-    import subprocess
-    import sys
-    script_path = Path(__file__).parent / "src" / "melody_analysis_v2" / "analyze_single.py"
-    cmd = [
-        sys.executable,
-        str(script_path),
-        "--file_path", str(file_path),
-        "--method", method,
-        "--cache_dir", str(cache_dir),
-        "--label_prefix", label_prefix
-    ]
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, check=True)
-    
-    if cache_path.exists():
-        with open(cache_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        seq = [s.get('label', '') for s in data.get('segments', [])]
-        pitch_midi = np.array(data.get('pitch_midi', []), dtype=np.float32)
+    segmenter_base = MelodySegmenter()
+    n_frames = len(feat.times)
+    if n_frames > segmenter_base.max_ssm_frames:
+        step = int(np.ceil(n_frames / segmenter_base.max_ssm_frames))
+        ds_f = MelodyFeatures(
+            times=feat.times[::step],
+            pitch_midi=feat.pitch_midi[::step],
+            confidence=feat.confidence[::step],
+            energy=feat.energy[::step]
+        )
     else:
-        seq, pitch_midi = [], np.array([])
+        ds_f = feat
         
-    tiny_data = {
-        'seq': seq,
-        'pitch_midi': pitch_midi.tolist()
-    }
-    try:
-        tiny_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(tiny_path, 'w', encoding='utf-8') as f:
-            json.dump(tiny_data, f, default=safe_json)
-    except Exception:
-        pass
-        
-    return {
-        'seq': seq,
-        'pitch_midi': pitch_midi
-    }
-
-
-def parse_id3v2(filepath):
-    """
-    Parses ID3v2 tags from MP3 files in pure Python format.
-    Returns a dictionary with 'title', 'artist'.
-    """
-    tags = {}
-    try:
-        with open(filepath, 'rb') as f:
-            header = f.read(10)
-            if len(header) < 10 or header[:3] != b'ID3':
-                return tags
-            
-            major = header[3]
-            size_bytes = header[6:10]
-            tag_size = (size_bytes[0] << 21) | (size_bytes[1] << 14) | (size_bytes[2] << 7) | size_bytes[3]
-            
-            tag_data = f.read(tag_size)
-            
-            offset = 0
-            while offset + 10 < len(tag_data):
-                if major == 2:
-                    frame_id = tag_data[offset:offset+3].decode('latin1', errors='ignore')
-                    if not frame_id or frame_id == '\x00\x00\x00':
-                        break
-                    frame_size = (tag_data[offset+3] << 16) | (tag_data[offset+4] << 8) | tag_data[offset+5]
-                    frame_body = tag_data[offset+6:offset+6+frame_size]
-                    offset += 6 + frame_size
-                else:
-                    frame_id = tag_data[offset:offset+4].decode('latin1', errors='ignore')
-                    if not frame_id or frame_id == '\x00\x00\x00\x00':
-                        break
-                    fs_bytes = tag_data[offset+4:offset+8]
-                    if major == 4:
-                        frame_size = (fs_bytes[0] << 21) | (fs_bytes[1] << 14) | (fs_bytes[2] << 7) | fs_bytes[3]
-                    else:
-                        frame_size = (fs_bytes[0] << 24) | (fs_bytes[1] << 16) | (fs_bytes[2] << 8) | fs_bytes[3]
-                    
-                    frame_body = tag_data[offset+10:offset+10+frame_size]
-                    offset += 10 + frame_size
-                    
-                if frame_id.startswith('T') and frame_id != 'TXXX':
-                    if len(frame_body) > 1:
-                        encoding = frame_body[0]
-                        text_bytes = frame_body[1:]
-                        try:
-                            if encoding == 0:
-                                text = text_bytes.decode('latin1', errors='ignore')
-                            elif encoding == 1:
-                                text = text_bytes.decode('utf-16', errors='ignore')
-                            elif encoding == 2:
-                                text = text_bytes.decode('utf-16-be', errors='ignore')
-                            elif encoding == 3:
-                                text = text_bytes.decode('utf-8', errors='ignore')
-                            else:
-                                text = text_bytes.decode('latin1', errors='ignore')
-                        except Exception:
-                            text = text_bytes.decode('latin1', errors='ignore')
-                        
-                        text = text.strip('\x00').strip()
-                        
-                        if frame_id in ['TPE1', 'TPE2', 'TP1']:
-                            tags['artist'] = text
-                        elif frame_id in ['TIT2', 'TT2']:
-                            tags['title'] = text
-    except Exception:
-        pass
-    return tags
-
-
-def get_audio_metadata(filepath):
-    filepath = Path(filepath)
-    tags = parse_id3v2(filepath)
-    title = tags.get('title')
-    artist = tags.get('artist')
-    if not title or not artist:
-        filename = filepath.stem
-        cleaned = re.sub(r'^\d+\s*[-_]?\s*', '', filename)
-        parts = [p.strip() for p in cleaned.split(' - ')]
-        if len(parts) >= 2:
-            artist = artist or parts[0]
-            title = title or ' - '.join(parts[1:])
-        else:
-            title = title or cleaned
-            artist = artist or "Unknown"
-    return title.strip(), artist.strip()
-
-
-def plot_caplin_bands(res_orig, res_cover, output_path: Path, meta_orig=None, meta_cover=None):
-    from matplotlib.lines import Line2D
-    from src.melody_analysis_v2.visualization import _get_caplin_meta
-    
-    fig, axes = plt.subplots(2, 1, figsize=(15, 5), sharex=True)
-    plt.subplots_adjust(hspace=0.6)
-    
-    legend_handles_dict = {}
-    
-    for i, (name, res) in enumerate([('Original', res_orig), ('Cover', res_cover)]):
-        ax = axes[i]
-        meta = meta_orig if i == 0 else meta_cover
-        if meta:
-            t_title, t_artist = meta
-            ax.set_title(f"Melodic Segmentation (Bands) - {name}\nSong: {t_title} | Performer: {t_artist}", fontweight='bold', fontsize=10)
-        else:
-            ax.set_title(f"Melodic Segmentation (Bands) - {name}", fontweight='bold')
-            
-        ax.set_yticks([])
-        max_time = res.features.times[-1] if len(res.features.times) > 0 else 1.0
-        ax.set_xlim(0, max_time)
-        
-        for seg in res.segments:
-            start_time = seg.segment.start_time
-            end_time = seg.segment.end_time
-            label = seg.label
-            duration = end_time - start_time
-            
-            meta_info = _get_caplin_meta(label)
-            display_abbr = meta_info["abbr"]
-            display_full = meta_info["full"]
-            color = meta_info["color"]
-            
-            ax.axvspan(start_time, end_time, facecolor=color, alpha=0.8, edgecolor='black', linewidth=0.5)
-            
-            # Only draw text if segment is wide enough to avoid overlap
-            if duration > (max_time * 0.015): 
-                mid_time = (start_time + end_time) / 2
-                ax.text(mid_time, 0.5, display_abbr, horizontalalignment='center', verticalalignment='center',
-                        fontsize=10, fontweight='bold', color='black', transform=ax.get_xaxis_transform())
-                
-            if display_abbr not in legend_handles_dict:
-                legend_handles_dict[display_abbr] = Line2D([0], [0], color='w', marker='s', markersize=10, 
-                                                           markerfacecolor=color, label=f"{display_abbr}: {display_full}")
-    
-    # Sort legend
-    sorted_legend_abbrs = sorted(legend_handles_dict.keys())
-    legend_elements = [legend_handles_dict[abbr] for abbr in sorted_legend_abbrs]
-    
-    axes[0].legend(handles=legend_elements, loc='upper left', title="Formal Functions", 
-                   bbox_to_anchor=(1.01, 1), fontsize='small')
-    
-    axes[1].set_xlabel('Time (s)')
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Save only as PNG
-    png_path = output_path.with_suffix('.png')
-    plt.savefig(png_path, dpi=150, bbox_inches='tight')
-    plt.close()
-
-def plot_caplin_contour(res_orig, res_cover, output_path: Path, meta_orig=None, meta_cover=None):
-    from src.melody_analysis_v2.visualization import _get_caplin_meta
-    
-    fig, axes = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
-    plt.subplots_adjust(hspace=0.35)
-    
-    legend_handles_dict = {}
-    
-    for i, (name, res) in enumerate([('Original', res_orig), ('Cover', res_cover)]):
-        ax = axes[i]
-        meta = meta_orig if i == 0 else meta_cover
-        if meta:
-            t_title, t_artist = meta
-            ax.set_title(f"Melodic contour and detected segments - {name}\nSong: {t_title} | Performer: {t_artist}", fontweight='bold', fontsize=10)
-        else:
-            ax.set_title(f"Melodic contour and detected segments - {name}", fontweight='bold')
-        
-        # Pitch MIDI
-        f0_midi = res.features.pitch_midi.copy()
-        ax.plot(res.features.times, f0_midi, color='tab:blue', linewidth=1.5, label='Pitch (MIDI)')
-        ax.set_ylabel('Pitch (MIDI)', color='tab:blue')
-        
-        # Energy
-        ax2 = ax.twinx()
-        energy = res.features.energy
-        if np.max(energy) > 0:
-            energy = energy / np.max(energy)
-        ax2.plot(res.features.times, energy, color='tab:green', alpha=0.5, linewidth=1.0, label='Normalized energy')
-        ax2.set_ylabel('Normalized energy', color='tab:green')
-        ax2.tick_params(axis='y', labelcolor='tab:green')
-        ax2.set_ylim(-0.05, 1.05)
-        
-        # Segments and Labels
-        max_time = res.features.times[-1] if len(res.features.times) > 0 else 1.0
-        for seg in res.segments:
-            meta_info = _get_caplin_meta(seg.label)
-            display_abbr = meta_info["abbr"]
-            display_full = meta_info["full"]
-            color = meta_info["color"]
-            
-            ax.axvspan(seg.segment.start_time, seg.segment.end_time, color=color, alpha=0.3)
-            
-            # Label on top (only if space)
-            duration = seg.segment.end_time - seg.segment.start_time
-            if duration > (max_time * 0.02):
-                mid_time = (seg.segment.start_time + seg.segment.end_time) / 2
-                ax.text(mid_time, 0.96, display_abbr, color='black', weight='bold', size=9,
-                        horizontalalignment='center', transform=ax.get_xaxis_transform())
-                        
-            if display_abbr not in legend_handles_dict:
-                from matplotlib.lines import Line2D
-                legend_handles_dict[display_abbr] = Line2D([0], [0], color='w', marker='s', markersize=10, 
-                                                            markerfacecolor=color, label=f"{display_abbr}: {display_full}")
-
-        ax.set_xlim(0, max_time)
-        
-        # Legend
-        if i == 0:
-            sorted_legend_abbrs = sorted(legend_handles_dict.keys())
-            legend_elements = [legend_handles_dict[abbr] for abbr in sorted_legend_abbrs]
-            ax.legend(handles=legend_elements, loc='upper left', title="Formal Functions", 
-                      bbox_to_anchor=(1.10, 1), fontsize='small')
-
-    axes[1].set_xlabel('Time (s)')
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Save only as PNG
-    png_path = output_path.with_suffix('.png')
-    plt.savefig(png_path, dpi=150, bbox_inches='tight')
-    plt.close()
-
-def plot_contour_only_comparison(res_orig, res_cover, output_path: Path, meta_orig=None, meta_cover=None):
-    fig, axes = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
-    plt.subplots_adjust(hspace=0.35)
-    
-    for i, (name, res) in enumerate([('Original', res_orig), ('Cover', res_cover)]):
-        ax = axes[i]
-        meta = meta_orig if i == 0 else meta_cover
-        if meta:
-            t_title, t_artist = meta
-            ax.set_title(f"Melodic contour - {name}\nSong: {t_title} | Performer: {t_artist}", fontweight='bold', fontsize=10)
-        else:
-            ax.set_title(f"Melodic contour - {name}", fontweight='bold')
-        
-        # Pitch MIDI
-        f0_midi = res.features.pitch_midi.copy()
-        ax.plot(res.features.times, f0_midi, color='tab:blue', linewidth=1.5, label='Pitch (MIDI)')
-        ax.set_ylabel('Pitch (MIDI)')
-        
-        # Twin axis for Hz scale representation
-        ax2 = ax.twinx()
-        f0_hz = np.nan_to_num(np.where(f0_midi > 0, 440.0 * np.power(2.0, (f0_midi - 69.0) / 12.0), 0))
-        ax2.plot(res.features.times, f0_hz, color='tab:red', alpha=0.5, linewidth=1.0, label='f0 (Hz)')
-        ax2.set_ylabel('f0 (Hz)', color='tab:red')
-        ax2.tick_params(axis='y', labelcolor='tab:red')
-        
-        max_time = res.features.times[-1] if len(res.features.times) > 0 else 1.0
-        ax.set_xlim(0, max_time)
-        ax.grid(True, alpha=0.2)
-
-    axes[1].set_xlabel('Time (s)')
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Save only as PNG
-    png_path = output_path.with_suffix('.png')
-    plt.savefig(png_path, dpi=150, bbox_inches='tight')
-    plt.close()
-
-def plot_energy_only_comparison(res_orig, res_cover, output_path: Path, meta_orig=None, meta_cover=None):
-    fig, axes = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
-    plt.subplots_adjust(hspace=0.35)
-    
-    for i, (name, res) in enumerate([('Original', res_orig), ('Cover', res_cover)]):
-        ax = axes[i]
-        meta = meta_orig if i == 0 else meta_cover
-        if meta:
-            t_title, t_artist = meta
-            ax.set_title(f"Normalized energy - {name}\nSong: {t_title} | Performer: {t_artist}", fontweight='bold', fontsize=10)
-        else:
-            ax.set_title(f"Normalized energy - {name}", fontweight='bold')
-        
-        energy = res.features.energy
-        ax.plot(res.features.times, energy, color='tab:green', linewidth=1.5)
-        ax.set_ylabel('Normalized energy')
-        
-        max_time = res.features.times[-1] if len(res.features.times) > 0 else 1.0
-        ax.set_xlim(0, max_time)
-        ax.grid(True, alpha=0.2)
-
-    axes[1].set_xlabel('Time (s)')
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Save only as PNG
-    png_path = output_path.with_suffix('.png')
-    plt.savefig(png_path, dpi=150, bbox_inches='tight')
-    plt.close()
-
-def plot_melody_and_energy_comparison(res_orig, res_cover, output_path: Path, meta_orig=None, meta_cover=None):
-    fig, axes = plt.subplots(2, 1, figsize=(15, 8), sharex=True)
-    plt.subplots_adjust(hspace=0.35)
-    
-    for i, (name, res) in enumerate([('Original', res_orig), ('Cover', res_cover)]):
-        ax = axes[i]
-        meta = meta_orig if i == 0 else meta_cover
-        if meta:
-            t_title, t_artist = meta
-            ax.set_title(f"Melodic contour and energy - {name}\nSong: {t_title} | Performer: {t_artist}", fontweight='bold', fontsize=10)
-        else:
-            ax.set_title(f"Melodic contour and energy - {name}", fontweight='bold')
-        
-        # Pitch MIDI
-        f0_midi = res.features.pitch_midi.copy()
-        ax.plot(res.features.times, f0_midi, color='tab:blue', linewidth=1.5, label='Pitch (MIDI)')
-        ax.set_ylabel('Pitch (MIDI)', color='tab:blue')
-        ax.tick_params(axis='y', labelcolor='tab:blue')
-        
-        # Energy
-        ax2 = ax.twinx()
-        energy = res.features.energy
-        ax2.plot(res.features.times, energy, color='tab:green', alpha=0.6, linewidth=1.2, label='Normalized energy')
-        ax2.set_ylabel('Normalized energy', color='tab:green')
-        ax2.tick_params(axis='y', labelcolor='tab:green')
-        
-        max_time = res.features.times[-1] if len(res.features.times) > 0 else 1.0
-        ax.set_xlim(0, max_time)
-        ax.grid(True, alpha=0.2)
-
-    axes[1].set_xlabel('Time (s)')
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    # Save only as PNG
-    png_path = output_path.with_suffix('.png')
-    plt.savefig(png_path, dpi=150, bbox_inches='tight')
-    plt.close()
-
-def save_dataset_comparative_table(dataset_dir: Path, output_dir: Path):
-    summary_path = output_dir / "mc_msa_summary.csv"
+    sim_matrix = segmenter_base.compute_self_similarity(ds_f)
+    ssm_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(ssm_path, sim_matrix)
+    return sim_matrix
+    summary_path = output_dir / "mc_msa_summary_custom_params.csv"
     if not summary_path.exists():
         print(f"[Comparative Table] Summary file not found at {summary_path}")
         return
         
     dataset_name = dataset_dir.name
     
-    method_rows = {}
+    rows = []
     try:
         with open(summary_path, 'r', encoding='utf-8') as f:
-            header = f.readline().strip().split(',')
-            header_indices = {col.strip().lower(): i for i, col in enumerate(header)}
+            header = [c.strip().lower() for c in f.readline().strip().split(',')]
             for line in f:
-                parts = line.strip().split(',')
-                if len(parts) > 0:
-                    method_rows[parts[0]] = parts
+                parts = [p.strip() for p in line.strip().split(',')]
+                if len(parts) >= len(header):
+                    rows.append(dict(zip(header, parts)))
     except Exception as e:
         print(f"Error reading {summary_path}: {e}")
         return
         
-    if not method_rows:
+    if not rows:
         return
         
-    sorted_methods = sorted(list(method_rows.keys()))
-    
     lines = []
-    divider_len = 185
+    divider_len = 160
     lines.append("=" * divider_len)
-    lines.append(f"TABLA DE RESULTADOS STANDARIZADA - MC-MSA Baseline ({dataset_name})")
+    lines.append(f"TABLA DE RESULTADOS DE EXPERIMENTOS MC-MSA CON PARÁMETROS CUSTOM ({dataset_name})")
     lines.append("=" * divider_len)
     
-    header_line = f"{'Dataset':<15} | {'Method':<20} | {'Avg. LCS (%)':<12} | {'MRR (%)':<8} | {'Top-5 (%)':<10} | {'DTW':<8} | {'MAP (%)':<8} | {'MR':<6} | {'MDR':<5} | {'Top-10 (%)':<10} | {'Threshold':<10} | {'F1-Score':<9} | {'Precision (%)':<14} | {'Recall (%)':<11} | {'FPR (%)':<8} | {'FNR (%)':<8}"
-    lines.append(header_line)
+    hdr_cols = [
+        f"{'Method':<18}", f"{'Avg. LCS (%)':<14}", f"{'MRR (%)':<10}", f"{'Top-5 (%)':<10}", 
+        f"{'Top-10 (%)':<10}", f"{'DTW':<10}", f"{'Parameters (L, σ, τ_pk, L_tail, ε_slp, τ_E)':<55}"
+    ]
+    lines.append(" | ".join(hdr_cols))
     lines.append("-" * divider_len)
     
-    for method in sorted_methods:
-        row = method_rows[method]
-        method_disp = method.upper()
-        
-        def get_val(name, is_pct=False, fmt=".2f", default="N/A"):
-            idx = header_indices.get(name.lower())
-            if idx is not None and idx < len(row) and row[idx] != "":
-                try:
-                    val = float(row[idx])
-                    if is_pct:
-                        val *= 100
-                    return f"{val:{fmt}}"
-                except ValueError:
-                    return row[idx]
-            return default
-
+    for r in rows:
+        method_disp = r.get("method", "").upper()
         try:
-            lcs_pct = get_val("avg_lcs", is_pct=True)
-            mrr_pct = get_val("mrr", is_pct=True)
-            top5_pct = get_val("top5_prec", is_pct=True)
-            dtw_val = get_val("avg_dtw", fmt=".2f")
-            map_pct = get_val("map", is_pct=True)
-            mr = get_val("mr")
-            mdr = get_val("mdr", fmt=".1f")
-            top10_pct = get_val("top10_prec" if "top10_prec" in header_indices else "top10", is_pct=True)
-            thresh = get_val("threshold", fmt=".4f")
-            f1 = get_val("f1_score", fmt=".4f")
-            prec_pct = get_val("precision", is_pct=True)
-            rec_pct = get_val("recall", is_pct=True)
-            fpr_pct = get_val("fpr", is_pct=True)
-            fnr_pct = get_val("fnr", is_pct=True)
+            lcs = f"{float(r.get('avg_lcs', 0))*100:.2f}%"
+            mrr = f"{float(r.get('mrr', 0))*100:.2f}%"
+            top5 = f"{float(r.get('top5_prec', 0))*100:.2f}%"
+            top10 = f"{float(r.get('top10_prec', 0))*100:.2f}%"
+            dtw = f"{float(r.get('avg_dtw', 0)):.2f}"
             
-            row_str = (f"{dataset_name:<15} | {method_disp:<20} | {lcs_pct:<12} | {mrr_pct:<8} | {top5_pct:<10} | {dtw_val:<8} | "
-                       f"{map_pct:<8} | {mr:<6} | {mdr:<5} | {top10_pct:<10} | {thresh:<10} | {f1:<9} | {prec_pct:<14} | "
-                       f"{rec_pct:<11} | {fpr_pct:<8} | {fnr_pct:<8}")
-            lines.append(row_str)
+            rad = r.get("checkerboard_radius", "-")
+            ker = r.get("kernel_size", "-")
+            pk = r.get("peak_threshold", "-")
+            tl = r.get("tail_proportion", "-")
+            s_e = r.get("slope_epsilon", "-")
+            e_t = r.get("energy_tau", "-")
+            
+            params_str = f"L:{rad}, σ:{ker}, τ_pk:{pk}, L_tail:{tl}, ε_slp:{s_e}, τ_E:{e_t}"
+            row_cols = [f"{method_disp:<18}", f"{lcs:>14}", f"{mrr:>10}", f"{top5:>10}", f"{top10:>10}", f"{dtw:>10}", f"{params_str:<55}"]
+            lines.append(" | ".join(row_cols))
         except Exception as e:
-            lines.append(f"{dataset_name:<15} | {method_disp:<20} | Error formatting row: {e}")
+            lines.append(f"{method_disp:<18} | Error formatting row: {e}")
             
     lines.append("=" * divider_len)
     
+    # Also calculate and display grand average across all methods if multiple methods exist
+    if len(rows) > 1:
+        mean_lcs = np.mean([float(r.get('avg_lcs', 0)) for r in rows]) * 100
+        mean_mrr = np.mean([float(r.get('mrr', 0)) for r in rows]) * 100
+        mean_top5 = np.mean([float(r.get('top5_prec', 0)) for r in rows]) * 100
+        mean_top10 = np.mean([float(r.get('top10_prec', 0)) for r in rows]) * 100
+        mean_dtw = np.mean([float(r.get('avg_dtw', 0)) for r in rows])
+        lines.append(f"PROMEDIO GLOBAL DEL EXPERIMENTO:")
+        lines.append(f"Avg LCS: {mean_lcs:.2f}% | MRR: {mean_mrr:.2f}% | Top-5: {mean_top5:.2f}% | Top-10: {mean_top10:.2f}% | DTW: {mean_dtw:.2f}")
+        lines.append("=" * divider_len)
+
     table_content = "\n".join(lines) + "\n"
-    table_path = dataset_dir / "comparative_table.txt"
+    table_path = output_dir / "comparative_table_custom_params.txt"
     try:
         table_path.write_text(table_content, encoding='utf-8')
         print(f"\n[Comparative Table] Successfully saved at {table_path}")
     except Exception as e:
         print(f"Error writing comparative table: {e}")
 
-    # Generate Ranking Table (Exact Match to Image 1)
-    ranking_lines = []
-    ranking_lines.append(f"{'Dataset':<15} | {'Method':<20} | {'MRR (%)':<10} | {'MAP (%)':<10} | {'MR':<8} | {'MDR':<8} | {'Top-5 (%)':<10} | {'Top-10 (%)':<10}")
-    ranking_lines.append("-" * 105)
 
-    # Generate Binary Classification Table (Exact Match to Image 2)
-    binary_lines = []
-    binary_lines.append(f"{'Dataset':<15} | {'Method':<20} | {'Threshold':<11} | {'F1-Score':<10} | {'Precision (%)':<14} | {'Recall (%)':<12} | {'FPR (%)':<9} | {'FNR (%)':<9}")
-    binary_lines.append("-" * 110)
-
-    # Generate Confusion Matrices Table
-    cm_lines = []
-    cm_lines.append(f"{'Dataset':<15} | {'Method':<20} | {'Threshold':<11} | {'TP':<8} | {'FP':<8} | {'FN':<8} | {'TN':<8} | {'Accuracy (%)':<13}")
-    cm_lines.append("-" * 105)
-
-    for method in sorted_methods:
-        row = method_rows[method]
-        method_disp = method.upper()
-        
-        def get_val(name, is_pct=False, fmt=".2f", default="N/A"):
-            idx = header_indices.get(name.lower())
-            if idx is not None and idx < len(row) and row[idx] != "":
-                try:
-                    val = float(row[idx])
-                    if is_pct:
-                        val *= 100
-                    return f"{val:{fmt}}"
-                except ValueError:
-                    return row[idx]
-            return default
-
-        try:
-            mrr_pct = get_val("mrr", is_pct=True)
-            map_pct = get_val("map", is_pct=True)
-            mr = get_val("mr")
-            mdr = get_val("mdr", fmt=".1f")
-            top5_pct = get_val("top5_prec", is_pct=True)
-            top10_pct = get_val("top10_prec" if "top10_prec" in header_indices else "top10", is_pct=True)
-            
-            row_ranking = f"{dataset_name:<15} | {method_disp:<20} | {mrr_pct:<10} | {map_pct:<10} | {mr:<8} | {mdr:<8} | {top5_pct:<10} | {top10_pct:<10}"
-            ranking_lines.append(row_ranking)
-        except Exception:
-            pass
-
-        try:
-            thresh = get_val("threshold", fmt=".4f")
-            f1 = get_val("f1_score", fmt=".4f")
-            prec_pct = get_val("precision", is_pct=True)
-            rec_pct = get_val("recall", is_pct=True)
-            fpr_pct = get_val("fpr", is_pct=True)
-            fnr_pct = get_val("fnr", is_pct=True)
-
-            row_binary = f"{dataset_name:<15} | {method_disp:<20} | {thresh:<11} | {f1:<10} | {prec_pct:<14} | {rec_pct:<12} | {fpr_pct:<9} | {fnr_pct:<9}"
-            binary_lines.append(row_binary)
-        except Exception:
-            pass
-
-        try:
-            thresh = get_val("threshold", fmt=".4f")
-            tp = get_val("tp", fmt="d")
-            fp = get_val("fp", fmt="d")
-            fn = get_val("fn", fmt="d")
-            tn = get_val("tn", fmt="d")
-            acc_pct = get_val("accuracy", is_pct=True)
-
-            row_cm = f"{dataset_name:<15} | {method_disp:<20} | {thresh:<11} | {tp:<8} | {fp:<8} | {fn:<8} | {tn:<8} | {acc_pct:<13}"
-            cm_lines.append(row_cm)
-        except Exception:
-            pass
-
-    ranking_content = "\n".join(ranking_lines) + "\n"
-    binary_content = "\n".join(binary_lines) + "\n"
-    cm_content = "\n".join(cm_lines) + "\n"
-
-    try:
-        (dataset_dir / "academic_summary_table.txt").write_text(ranking_content, encoding='utf-8')
-        (dataset_dir / "academic_binary_table.txt").write_text(binary_content, encoding='utf-8')
-        (dataset_dir / "confusion_matrices_table.txt").write_text(cm_content, encoding='utf-8')
-
-        print("\n=== TABLA 1: RANKING Y COBERTURA (RANKING METRICS) ===")
-        print(ranking_content)
-
-        print("=== TABLA 2: CLASIFICACIÓN BINARIA (BINARY METRICS) ===")
-        print(binary_content)
-
-        print("=== MATRICES DE CONFUSIÓN (CONFUSION MATRICES) ===")
-        print(cm_content)
-    except Exception as e:
-        print(f"Error writing academic tables: {e}")
-
-
-def find_available_datasets(directory: Path):
-    datasets = []
-    if not directory.exists():
-        return datasets
-    for item in directory.iterdir():
-        if item.is_dir() and not item.name.startswith('.'):
-            has_orig_cov = (item / "originales").exists() and (item / "covers").exists()
-            if item.name.startswith("dataset_") or has_orig_cov:
-                datasets.append(item.name)
-    return sorted(list(set(datasets)))
-
-
-def main():
-    available_methods = [
-        'all', 'all_f0', 'all_melody',
-        'pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0',
-        'melodia', 'tachibana', 'poliner', 'durrieu', 'basic_pitch',
-        'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
-        'bs_roformer', 'demucs', 'ensemble'
-    ]
-    parser = argparse.ArgumentParser(description="Melody extraction MC-MSA with cache support.")
-    parser.add_argument("--method", type=str, default=None, 
-                        choices=available_methods,
-                        help="Extraction method to use")
-    parser.add_argument("--dataset_dir", type=str, default=None,
-                        help="Base directory of the dataset")
-    parser.add_argument("--orig_subdir", type=str, default="originales",
-                        help="Subdirectory of original songs")
-    parser.add_argument("--cover_subdir", type=str, default="covers",
-                        help="Subdirectory of cover songs")
-    parser.add_argument("--output_dir", type=str, default="resultados_mc_msa",
-                        help="Directory for graphical outputs and reports (if relative, resolves inside dataset folder)")
-    parser.add_argument("--cache_dir", type=str, default="cache",
-                        help="Directory for JSON analysis cache")
-    parser.add_argument("--match_mode", type=str, default=None,
-                        choices=["id", "stem"],
-                        help="Match method: 'id' (numeric ID prefix) or 'stem' (normalized name/stem)")
-    parser.add_argument("--dtw_all_pairs", action="store_true",
-                        help="Compute DTW for all pairs (slow)")
-    parser.add_argument("--clear_cache", action="store_true",
-                        help="Delete existing cache for the selected method before starting")
-    parser.add_argument("--plots", type=str, default="n", choices=["y", "n"],
-                        help="Generate qualitative plots and diagrams (y/n)")
-    args = parser.parse_args()
-
-    args.plots = (args.plots == 'y')
-
-    base_dir = Path(__file__).parent.absolute()
-
-    if args.dataset_dir is None:
-        datasets = find_available_datasets(base_dir)
-        if not datasets:
-            print("\nNo dataset folders automatically detected in the base directory.")
-            manual = input("Please enter the path or name of the dataset to use: ").strip()
-            args.dataset_dir = manual
-        else:
-            print("\n=== Dataset Selection ===")
-            for i, d in enumerate(datasets, 1):
-                print(f"{i}. {d}")
-            print(f"{len(datasets) + 1}. [Process ALL datasets at once]")
-            print(f"{len(datasets) + 2}. [Enter another manual path...]")
-            
-            while True:
-                try:
-                    choice = input(f"\nSelect a dataset (1-{len(datasets) + 2}): ").strip()
-                    idx = int(choice) - 1
-                    if 0 <= idx < len(datasets):
-                        args.dataset_dir = datasets[idx]
-                        break
-                    elif idx == len(datasets):
-                        args.dataset_dir = "all"
-                        break
-                    elif idx == len(datasets) + 1:
-                        manual = input("Enter the path or name of the dataset: ").strip()
-                        if manual:
-                            args.dataset_dir = manual
-                            break
-                    else:
-                        print(f"Error: Please select a number between 1 and {len(datasets) + 2}.")
-                except ValueError:
-                    if choice in datasets:
-                        args.dataset_dir = choice
-                        break
-                    elif choice.lower() == "all":
-                        args.dataset_dir = "all"
-                        break
-                    print("Error: Invalid input. Enter option number or exact name.")
-
-    if args.method is None:
-        print("\n=== Extraction Method Selection ===")
-        
-        f0_methods = ['pyin', 'yin', 'crepe', 'ensemble', 'rmvpe', 'spice', 'jdc', 'fcn_f0']
-        melody_methods = [
-            'poliner', 'durrieu', 'tachibana', 'melodia', 'basic_pitch',
-            'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
-            'bs_roformer', 'demucs'
-        ]
-        other_methods = []
-        
-        idx_map = {}
-        curr_idx = 1
-        
-        print("\n--- F0 Extractors (Fundamental Frequency) ---")
-        for m in f0_methods:
-            print(f"  {curr_idx:2d}. {m}")
-            idx_map[curr_idx] = m
-            curr_idx += 1
-            
-        print(f"  {curr_idx:2d}. {'all_f0':<20} [All F0 extractors]")
-        idx_map[curr_idx] = 'all_f0'
-        curr_idx += 1
-        
-        print("\n--- Melody Extractors ---")
-        for m in melody_methods:
-            print(f"  {curr_idx:2d}. {m}")
-            idx_map[curr_idx] = m
-            curr_idx += 1
-            
-        print(f"  {curr_idx:2d}. {'all_melody':<20} [All Melody extractors]")
-        idx_map[curr_idx] = 'all_melody'
-        curr_idx += 1
-        
-        print("\n--- Special / Thesis Selection ---")
-        print(f"  {curr_idx:2d}. {'tesis':<20} [Métodos Selección Tesis (YIN, pYIN, Melodia, SPICE, CREPE, RMVPE, FCN-f0, Demucs+CREPE)]")
-        idx_map[curr_idx] = 'tesis'
-        curr_idx += 1
-
-        print("\n--- Others / Specials ---")
-        for m in other_methods:
-            classification = METHOD_CLASSIFICATION.get(m, "")
-            print(f"  {curr_idx:2d}. {m:<20} [{classification}]")
-            idx_map[curr_idx] = m
-            curr_idx += 1
-            
-        print(f"  {curr_idx:2d}. {'all':<20} [All methods]")
-        idx_map[curr_idx] = 'all'
-        
-        while True:
-            try:
-                choice = input(f"\nSelect a method (1-{curr_idx}): ").strip()
-                if choice.lower() in available_methods:
-                    args.method = choice.lower()
-                    break
-                idx = int(choice)
-                if 1 <= idx <= curr_idx:
-                    args.method = idx_map[idx]
-                    break
-                else:
-                    print(f"Error: Please select a number between 1 and {curr_idx}.")
-                    gc.collect()
-            except ValueError:
-                if choice.strip().lower() in available_methods:
-                    args.method = choice.strip().lower()
-                    break
-                print("Error: Invalid input. Enter method number or name.")
-                gc.collect()
-
-    if args.match_mode is None:
-        print("\n=== Match Method Selection ===")
-        print("1. By Numeric ID (e.g. '01 - Pedro Infante.wav' with '01 - Cover.mp3')")
-        print("2. By Exact Name / Stem (e.g. 'Te_Vi_Venir_Original.wav' with 'Te Vi Venir (Covers).mp3')")
-        print("3. Smart / Fuzzy Match (For complex names or classical music, e.g. '02 - Symphony No. 40...')")
-        
-        while True:
-            choice = input("\nSelect match method (1-3) [Default: 1]: ").strip()
-            if not choice or choice == "1":
-                args.match_mode = "id"
-                break
-            elif choice == "2":
-                args.match_mode = "stem"
-                break
-            elif choice == "3":
-                args.match_mode = "fuzzy"
-                break
-            else:
-                print("Error: Please select 1, 2 or 3.")
-                
-    args.match_by_stem = (args.match_mode == "stem")
-    run_mc_msa_execution(args, base_dir)
-
-def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: Path, cache_dir: Path):
+def run_custom_param_experiment(dataset_dir: Path, methods: list, args, base_dir: Path, cache_dir: Path):
     orig_dir = dataset_dir / args.orig_subdir
     cover_dir = dataset_dir / args.cover_subdir
     
@@ -1133,548 +224,560 @@ def run_single_dataset_mc_msa(dataset_dir: Path, methods: list, args, base_dir: 
         common_ids = sorted(list(set(orig_files.keys()).intersection(set(cover_files.keys()))))
         
     print("\n" + "="*80)
-    print(f" PROCESSING DATASET: {dataset_dir.name} ({len(common_ids)} pairs found)")
+    print(f" MC-MSA CUSTOM PARAMETER SWEEP: {dataset_dir.name} ({len(common_ids)} pairs)")
     print("="*80)
     
     if not common_ids:
-        print("No se encontraron pares válidos. Skipping...")
+        print("No valid track pairs found. Skipping...")
         return
 
-    # Expand methods list if special keywords are passed
+    # Expand methods keyword
     expanded_methods = []
     for m in methods:
-        if m == "all":
-            expanded_methods.extend(['pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0', 'melodia', 'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe', 'basic_pitch', 'tachibana', 'poliner', 'durrieu', 'ensemble'])
-        elif m == "all_f0":
-            expanded_methods.extend(['pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0'])
-        elif m == "all_melody":
-            expanded_methods.extend(['poliner', 'durrieu', 'tachibana', 'melodia', 'basic_pitch', 'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe', 'bs_roformer', 'demucs'])
-        elif m == "tesis":
+        if m == "tesis":
             expanded_methods.extend(['yin', 'pyin', 'melodia', 'spice', 'crepe', 'rmvpe', 'fcn_f0', 'demucs_crepe', 'demucs'])
+        elif m == "all":
+            expanded_methods.extend(['pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0', 'melodia', 'demucs_crepe', 'demucs', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe', 'basic_pitch', 'tachibana', 'poliner', 'durrieu', 'ensemble'])
         else:
             expanded_methods.append(m)
-    methods = list(dict.fromkeys(expanded_methods)) # unique
+    methods = list(dict.fromkeys(expanded_methods))
 
-    print("Methods to evaluate:")
-    for m in methods:
-        classification = METHOD_CLASSIFICATION.get(m, "Unknown")
-        print(f"  - {m}: {classification}")
+    # Parameter grid with empirical fluctuations around literature baseline values:
+    # L: [4, 6, 8, 10, 12] (base L=8)
+    # σ: [2, 3, 4, 5] (base σ=2, starting from 2)
+    # τ_peak: [0.10, 0.15, 0.20, 0.25, 0.30] (base τ_peak=0.20)
+    # y: [0.10, 0.15, 0.20, 0.25, 0.30] (base y=0.20)
+    # θ_slope: [0.05, 0.10, 0.15, 0.20, 0.25] (base θ_slope=0.15)
+    # τ_E: [0.15, 0.30, 0.45] (base τ_E=0.30, 0.15)
+    
+    grid_r = args.radii if args.radii else DEFAULT_RADII
+    grid_k = args.kernel_sizes if args.kernel_sizes else DEFAULT_KERNEL_SIZES
+    grid_pk = args.peak_thresholds if args.peak_thresholds else DEFAULT_PEAK_THRESHOLDS
+    grid_tl = args.tail_proportions if args.tail_proportions else DEFAULT_TAIL_PROPORTIONS
+    grid_se = args.slope_epsilons if args.slope_epsilons else DEFAULT_SLOPE_EPSILONS
+    grid_et = args.energy_taus if args.energy_taus else DEFAULT_ENERGY_TAUS
 
-    classifier = MelodyClassifierThesis()
-    summary_path = output_dir / "mc_msa_summary.csv"
+    grid_combinations = list(itertools.product(grid_r, grid_k, grid_pk, grid_tl, grid_se, grid_et))
+    
+    # Optional subsampling / max evaluations to prevent exceedingly long runs if requested
+    if getattr(args, 'max_grid_evals', None) and args.max_grid_evals > 0 and args.max_grid_evals < len(grid_combinations):
+        step = max(1, len(grid_combinations) // args.max_grid_evals)
+        grid_combinations = grid_combinations[::step][:args.max_grid_evals]
+
+    print(f"\nEmpirical Grid Fluctuations Setup:")
+    print(f"  - Checkerboard Radius (L): {grid_r}")
+    print(f"  - 1D Gaussian Smoothing (σ): {grid_k}")
+    print(f"  - Peak Threshold (τ_peak): {grid_pk}")
+    print(f"  - Tail Portion (y): {grid_tl}")
+    print(f"  - Slope Epsilon (θ_slope): {grid_se}")
+    print(f"  - Energy Thresholds (τ_E): {grid_et}")
+    print(f"Total parameter combinations to run per method: {len(grid_combinations)}")
+
+    summary_path = output_dir / "mc_msa_summary_custom_params.csv"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
-    # Check if summary_path exists but has old format, delete it to avoid column mismatch
-    if summary_path.exists():
-        try:
-            with open(summary_path, 'r') as f:
-                first_line = f.readline().strip()
-            if "threshold" not in first_line or "fpr" not in first_line:
-                summary_path.unlink()
-        except Exception:
-            pass
 
-    if not summary_path.exists():
-        with open(summary_path, 'w') as f:
-            f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw,threshold,f1_score,precision,recall,fpr,fnr,tp,fp,fn,tn,accuracy\n")
+    with open(summary_path, 'w', encoding='utf-8') as f:
+        f.write("method,pairs,avg_lcs,mr,mrr,mdr,map,top5_prec,top10_prec,avg_dtw,checkerboard_radius,kernel_size,peak_threshold,tail_proportion,slope_epsilon,energy_tau\n")
 
     for method in methods:
-        classification = METHOD_CLASSIFICATION.get(method, "Unknown")
-        print(f"\n[{method}] Processing... ({classification})")
-        analyzer = MelodyAnalyzer(extraction_method=method, classifier=classifier)
-        
-        out_method_dir = output_dir / method
-        out_method_dir.mkdir(parents=True, exist_ok=True)
-
-        res_originals = {}
-        total_p = len(common_ids)
-        for i, uid in enumerate(common_ids, 1):
-            try:
-                file_path = orig_files[uid]
-                prefix = f"  [{i}/{total_p}] ({i/total_p:.1%}) [Original] [{method}]"
-                cache_dir_method = cache_dir / method
-                tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
-                if tiny_path.exists():
-                    print(f"{prefix} [Cache] {file_path.name}")
-                else:
-                    print(f"{prefix} [Processing] {file_path.name}...")
-                
-                res_originals[uid] = load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=prefix)
-                gc.collect()
-            except Exception as e:
-                print(f"\nError analyzing original {uid} ({method}): {e}")
-                res_originals[uid] = None
-        print(f"\n  Originals loaded.")
-
-        res_covers = {}
-        for i, uid in enumerate(common_ids, 1):
-            try:
-                file_path = cover_files[uid]
-                prefix = f"  [{i}/{total_p}] ({i/total_p:.1%}) [Cover] [{method}]"
-                cache_dir_method = cache_dir / method
-                tiny_path = cache_dir_method / f"{file_path.stem}.tiny.json"
-                if tiny_path.exists():
-                    print(f"{prefix} [Cache] {file_path.name}")
-                else:
-                    print(f"{prefix} [Processing] {file_path.name}...")
-                
-                res_covers[uid] = load_or_analyze_light(analyzer, file_path, method, cache_dir, label_prefix=prefix)
-                gc.collect()
-            except Exception as e:
-                print(f"\nError analyzing cover {uid} ({method}): {e}")
-                res_covers[uid] = None
-        print(f"\n  Covers loaded.")
-        lcs_list, dtw_list, mrr_sum, top5_hits, top10_hits, valid_count = [], [], 0.0, 0, 0, 0
-        ranks_list = []
-        best_lcs, best_uid = -1.0, None
-        detailed_results = []
-        
-        # Store results one by one to shuffle thresholds
-        pairwise_lcs = []
-        pairwise_lev = []
-        pairwise_pitch_hist = []
-        pairwise_dtw = []
-        all_comparisons = []
-
-        # Load comparisons cache if it exists
+        print(f"\n[{method.upper()}] Loading audio features...")
         comp_cache_path = cache_dir / method / f"comparison_cache_{dataset_dir.name}.json"
         comp_cache = {}
-        comp_cache_changed = False
         if comp_cache_path.exists():
             try:
                 with open(comp_cache_path, 'r', encoding='utf-8') as f:
                     comp_cache = json.load(f)
-                print(f"  [Caché] Loaded previous comparisons from {comp_cache_path.name}")
-            except Exception as e:
-                print(f"  [Caché] Warning loading comparisons cache: {e}")
+            except Exception:
+                pass
+
+        # Parameter grid combinations matching thesis hyperparameters table
+        grid_L = args.radii if args.radii else DEFAULT_RADII
+        grid_k = args.kernel_sizes if args.kernel_sizes else DEFAULT_KERNEL_SIZES
+        grid_pk = args.peak_thresholds if args.peak_thresholds else DEFAULT_PEAK_THRESHOLDS
+        grid_dm = getattr(args, 'min_separations', None) or DEFAULT_MIN_SEPARATIONS
+        grid_tl = args.tail_proportions if args.tail_proportions else DEFAULT_TAIL_PROPORTIONS
+        grid_se = args.slope_epsilons if args.slope_epsilons else DEFAULT_SLOPE_EPSILONS
+        grid_et = args.energy_taus if args.energy_taus else DEFAULT_ENERGY_TAUS
+
+        grid_combinations = list(itertools.product(grid_L, grid_k, grid_pk, grid_tl, grid_se, grid_et))
+        if getattr(args, 'max_grid_evals', None) and args.max_grid_evals > 0 and args.max_grid_evals < len(grid_combinations):
+            step = max(1, len(grid_combinations) // args.max_grid_evals)
+            grid_combinations = grid_combinations[::step][:args.max_grid_evals]
+
+        run_phase0 = args.phase in ["0", "both", "all_phases"]
+        run_phase1 = args.phase in ["1", "both", "all_phases"]
+        run_phase2 = args.phase in ["2", "both", "all_phases"]
+        total_pairs = len(common_ids)
+        analyzer = None
+
+        # -------------------------------------------------------------
+        # PHASE 0: Direct F0/Melody Extraction from Audio
+        # -------------------------------------------------------------
+        if run_phase0:
+            print(f"\n  [PHASE 0/2] Extracting F0/Melody contours ({method.upper()}) from audio files...")
+            from src.melody_analysis_v2.features import clear_deep_learning_caches
+            import subprocess
+            clear_deep_learning_caches()
+
+            for pair_idx, uid in enumerate(common_ids, 1):
+                # Check if JSON cache files exist first
+                orig_json = cache_dir / method / f"{orig_files[uid].stem}.json"
+                cover_json = cache_dir / method / f"{cover_files[uid].stem}.json"
+
+                for f_path, j_path in [(orig_files[uid], orig_json), (cover_files[uid], cover_json)]:
+                    if not j_path.exists():
+                        # Run extraction in an isolated Python subprocess so ONNX/C++ memory is 100% freed by OS on exit
+                        py_code = (
+                            f"import sys, json, os; "
+                            f"from pathlib import Path; "
+                            f"sys.path.insert(0, {json.dumps(str(current_dir))}); "
+                            f"from src.melody_analysis_v2.pipeline import MelodyAnalyzer; "
+                            f"from run_mc_msa import safe_json; "
+                            f"analyzer = MelodyAnalyzer(extraction_method={json.dumps(method)}); "
+                            f"res = analyzer.analyze_file({json.dumps(str(f_path))}); "
+                            f"target_p = {json.dumps(str(j_path))}; "
+                            f"os.makedirs(os.path.dirname(target_p), exist_ok=True); "
+                            f"f = open(target_p, 'w', encoding='utf-8'); "
+                            f"json.dump(res.to_dict(), f, default=safe_json); "
+                            f"f.close()"
+                        )
+                        cmd = [sys.executable, "-c", py_code]
+                        try:
+                            subprocess.run(cmd, check=True)
+                        except Exception as e:
+                            print(f"    Error extracting F0 for {f_path.name}: {e}")
+
+                if pair_idx % 5 == 0 or pair_idx == total_pairs:
+                    print(f"    Phase 0 Progress: {pair_idx}/{total_pairs} pairs analyzed ({pair_idx/total_pairs*100:.1f}%)")
+            
+            clear_deep_learning_caches()
+
+        if not (run_phase1 or run_phase2):
+            print(f"\n  [PHASE 0 Completed for {method.upper()}] F0 Extraction finished and cached.")
+            continue
+
+        # -------------------------------------------------------------
+        # PHASE 1: SSM Matrix Calculation and Disk Persistence (.ssm.npy)
+        # -------------------------------------------------------------
+        if run_phase1:
+            print(f"\n  [PHASE 1/2] Pre-computing and caching SSM matrices on disk (.ssm.npy) for {total_pairs} pairs...")
+            
+            for pair_idx, uid in enumerate(common_ids, 1):
+                try:
+                    orig_ssm = cache_dir / method / f"{orig_files[uid].stem}.ssm.npy"
+                    cover_ssm = cache_dir / method / f"{cover_files[uid].stem}.ssm.npy"
+
+                    # Only load features and compute SSM if .ssm.npy does not exist
+                    if not (orig_ssm.exists() and cover_ssm.exists()):
+                        feat_o, _ = load_features_fast(analyzer, orig_files[uid], method, cache_dir)
+                        feat_c, _ = load_features_fast(analyzer, cover_files[uid], method, cache_dir)
+                        if not orig_ssm.exists():
+                            load_or_compute_ssm(feat_o, orig_files[uid], method, cache_dir)
+                        if not cover_ssm.exists():
+                            load_or_compute_ssm(feat_c, cover_files[uid], method, cache_dir)
+                        del feat_o, feat_c
+                except Exception as e:
+                    print(f"    Error generating SSM cache for {uid}: {e}")
+                if pair_idx % 5 == 0 or pair_idx == total_pairs:
+                    print(f"    Phase 1 Progress: {pair_idx}/{total_pairs} SSMs saved to disk ({pair_idx/total_pairs*100:.1f}%)")
+            
+            analyzer = None
+            gc.collect()
+
+        if not run_phase2:
+            print(f"\n  [PHASE 1 Completed for {method.upper()}] Features and SSM matrices (.ssm.npy) saved to disk.")
+            continue
+
+        # -------------------------------------------------------------
+        # PHASE 2: Experiment Evaluation (Grid Sweep using Disk SSMs with N x N Retrieval Ranking)
+        # --------------------------------------------------------------------------------------
+        print(f"\n  [PHASE 2/2] Running N x N retrieval experiments over {total_pairs} pairs x {len(grid_combinations)} hyperparameter combinations...")
         
-        for i, uid_cover in enumerate(common_ids, 1):
-            try:
-                print(f"  [{i}/{total_p}] ({i/total_p:.1%}) Comparing cover: ID {uid_cover}...", end='\r')
-                if res_covers[uid_cover] is None: continue
+        # Pre-load features and compute/load SSMs for all originals and covers
+        orig_features = {}
+        cover_features = {}
+        orig_ssms = {}
+        cover_ssms = {}
+
+        print("  Loading features and SSMs for all tracks...")
+        for pair_idx, uid in enumerate(common_ids, 1):
+            feat_o, _ = load_features_fast(None, orig_files[uid], method, cache_dir)
+            feat_c, _ = load_features_fast(None, cover_files[uid], method, cache_dir)
+            sim_o = load_or_compute_ssm(feat_o, orig_files[uid], method, cache_dir)
+            sim_c = load_or_compute_ssm(feat_c, cover_files[uid], method, cache_dir)
+            
+            if feat_o is not None and feat_c is not None and sim_o is not None and sim_c is not None:
+                orig_features[uid] = feat_o
+                cover_features[uid] = feat_c
+                orig_ssms[uid] = sim_o
+                cover_ssms[uid] = sim_c
+
+        valid_uids = list(orig_features.keys())
+        n_valid = len(valid_uids)
+        print(f"  Successfully loaded {n_valid} track pairs for N x N matrix evaluation.")
+
+        r_k_pk_combos = set((c[0], c[1], c[2]) for c in grid_combinations)
+        segmenter_base = MelodySegmenter()
+
+        # Cache segmentations per (r, k, pk)
+        print("  Pre-computing segmentations per (r, k, pk) cluster...")
+        segs_orig_cache = {}
+        segs_cover_cache = {}
+
+        for r, k, pk in r_k_pk_combos:
+            seg = MelodySegmenter(checkerboard_radius=r, kernel_size=k, peak_threshold=pk, filter_type=args.filter_type)
+            segs_orig_cache[(r, k, pk)] = {}
+            segs_cover_cache[(r, k, pk)] = {}
+
+            for uid in valid_uids:
+                # Original segmentation
+                feat_o = orig_features[uid]
+                sim_o = orig_ssms[uid]
+                nov_o = seg.compute_checkerboard_novelty(sim_o)
+                bounds_o = seg.find_boundaries(nov_o)
+                step_o = int(np.ceil(len(feat_o.times) / segmenter_base.max_ssm_frames)) if len(feat_o.times) > segmenter_base.max_ssm_frames else 1
+                indices_o = [0] + [min(int(b * step_o), len(feat_o.times) - 1) for b in bounds_o] + [len(feat_o.times) - 1]
+                segs_o = [MelodySegment(start_time=float(feat_o.times[s]), end_time=float(feat_o.times[e]), start_index=int(s), end_index=int(e)) 
+                          for s, e in zip(indices_o[:-1], indices_o[1:]) if e > s]
+                segs_orig_cache[(r, k, pk)][uid] = segs_o
+
+                # Cover segmentation
+                feat_c = cover_features[uid]
+                sim_c = cover_ssms[uid]
+                nov_c = seg.compute_checkerboard_novelty(sim_c)
+                bounds_c = seg.find_boundaries(nov_c)
+                step_c = int(np.ceil(len(feat_c.times) / segmenter_base.max_ssm_frames)) if len(feat_c.times) > segmenter_base.max_ssm_frames else 1
+                indices_c = [0] + [min(int(b * step_c), len(feat_c.times) - 1) for b in bounds_c] + [len(feat_c.times) - 1]
+                segs_c = [MelodySegment(start_time=float(feat_c.times[s]), end_time=float(feat_c.times[e]), start_index=int(s), end_index=int(e)) 
+                          for s, e in zip(indices_c[:-1], indices_c[1:]) if e > s]
+                segs_cover_cache[(r, k, pk)][uid] = segs_c
+
+        combo_metrics = {}
+
+        # Evaluate each hyperparameter combination with N x N pairwise ranking
+        print("  Evaluating hyperparameter combinations with N x N cross-dataset ranking...")
+        for combo_idx, combo in enumerate(grid_combinations, 1):
+            r, k, pk, tl, se, et = combo
+            clf = MelodyClassifierThesis(
+                tail_proportion=tl,
+                slope_epsilon=se,
+                energy_tau=et
+            )
+
+            # Classify all original and cover tracks
+            seq_orig_dict = {}
+            seq_cover_dict = {}
+
+            for uid in valid_uids:
+                anns_o = clf.classify(orig_features[uid], segs_orig_cache[(r, k, pk)][uid])
+                seq_orig_dict[uid] = [normalize_label(a.label) for a in anns_o]
+
+                anns_c = clf.classify(cover_features[uid], segs_cover_cache[(r, k, pk)][uid])
+                seq_cover_dict[uid] = [normalize_label(a.label) for a in anns_c]
+
+            # Perform N x N cover retrieval evaluation and binary classification
+            lcs_sims = []
+            ranks = []
+            mrrs = []
+            top5_hits = []
+            top10_hits = []
+            pairwise_lcs = []
+
+            for uid_cover in valid_uids:
+                sims = []
+                sim_dict = {}
+                cover_seq = seq_cover_dict[uid_cover]
                 
-                seq_cover = res_covers[uid_cover]['seq']
-                pitch_m = res_covers[uid_cover]['pitch_midi']
-                
-                if pitch_m is None or len(pitch_m) == 0: continue
-                
-                f0_cover = np.nan_to_num(np.where(pitch_m > 0, 440.0 * np.power(2.0, (pitch_m - 69.0) / 12.0), 0))
-                
-                similarities = []
-                for uid_orig in common_ids:
-                    if res_originals[uid_orig] is None: continue
-                    seq_orig = res_originals[uid_orig]['seq']
-                    pitch_o = res_originals[uid_orig]['pitch_midi']
-                    
-                    # Generate a unique key and validation hash
-                    key = f"{orig_files[uid_orig].name}:::{cover_files[uid_cover].name}"
-                    cached_entry = comp_cache.get(key, {})
-                    
-                    import hashlib
-                    orig_repr = ",".join(seq_orig) + f"|len:{len(pitch_o)}"
-                    cover_repr = ",".join(seq_cover) + f"|len:{len(pitch_m)}"
-                    h = hashlib.md5(f"{orig_repr}:::{cover_repr}".encode('utf-8')).hexdigest()
-                    
-                    # Invalidate if underlying data changed
-                    if cached_entry.get("hash") != h:
-                        cached_entry = {"hash": h}
-                        
-                    cache_updated = False
-                    
-                    # LCS
-                    if "lcs_similarity" in cached_entry:
-                        lcs_sim = cached_entry["lcs_similarity"]
-                    else:
-                        lcs_sim = calculate_lcs(seq_orig, seq_cover)
-                        cached_entry["lcs_similarity"] = lcs_sim
-                        cache_updated = True
-                        
-                    # Levenshtein
-                    if "levenshtein_similarity" in cached_entry:
-                        lev_sim = cached_entry["levenshtein_similarity"]
-                    else:
-                        lev_sim = calculate_levenshtein_similarity(seq_orig, seq_cover)
-                        cached_entry["levenshtein_similarity"] = lev_sim
-                        cache_updated = True
-                        
-                    # Pitch Histogram
-                    if "pitch_hist_similarity" in cached_entry:
-                        pitch_hist_sim = cached_entry["pitch_hist_similarity"]
-                    else:
-                        pitch_hist_sim = calculate_pitch_histogram_similarity(pitch_o, pitch_m)
-                        cached_entry["pitch_hist_similarity"] = pitch_hist_sim
-                        cache_updated = True
-                        
-                    # DTW
-                    dtw_val = -1.0
+                for uid_orig in valid_uids:
+                    orig_seq = seq_orig_dict[uid_orig]
+                    sim = calculate_lcs(orig_seq, cover_seq)
                     is_correct = (uid_orig == uid_cover)
-                    if args.dtw_all_pairs or is_correct:
-                        if "dtw_distance" in cached_entry and cached_entry["dtw_distance"] != "":
-                            dtw_val = cached_entry["dtw_distance"]
-                        else:
-                            try:
-                                dtw_res = compute_dtw_distance(pitch_c, pitch_o)
-                                dtw_val = dtw_res.get("hz_dfw_dtw_norm", 999.0)
-                                if dtw_val >= 990:
-                                    dtw_val = -1.0
-                            except Exception:
-                                dtw_val = -1.0
-                            cached_entry["dtw_distance"] = dtw_val if dtw_val >= 0 else ""
-                            cache_updated = True
-                            
-                    if cache_updated:
-                        comp_cache[key] = cached_entry
-                        comp_cache_changed = True
-                            
-                    pairwise_lcs.append((lcs_sim, is_correct))
-                    pairwise_lev.append((lev_sim, is_correct))
-                    pairwise_pitch_hist.append((pitch_hist_sim, is_correct))
-                    if dtw_val >= 0:
-                        pairwise_dtw.append((dtw_val, is_correct))
-                        
-                    all_comparisons.append({
-                        "cover_id": uid_cover,
-                        "original_id": uid_orig,
-                        "lcs_similarity": lcs_sim,
-                        "levenshtein_similarity": lev_sim,
-                        "pitch_hist_similarity": pitch_hist_sim,
-                        "dtw_distance": dtw_val if dtw_val >= 0 else "",
-                        "is_correct": 1 if is_correct else 0
-                    })
-                    
-                    similarities.append((lcs_sim, uid_orig))
-                
-                if not similarities: continue
-                similarities.sort(key=lambda x: x[0], reverse=True)
-                
-                rank, true_sim = -1, 0.0
-                for idx, (sim, r_uid) in enumerate(similarities):
-                    if r_uid == uid_cover:
-                        rank, true_sim = idx + 1, sim
+                    pairwise_lcs.append((sim, is_correct))
+                    sims.append((sim, uid_orig))
+                    sim_dict[uid_orig] = sim
+
+                # Correct pair self-LCS score
+                correct_sim = sim_dict[uid_cover]
+                lcs_sims.append(correct_sim)
+
+                # Rank candidates descending by similarity
+                sims.sort(key=lambda x: x[0], reverse=True)
+                rank = -1
+                for idx_rank, (sim, cand_uid) in enumerate(sims, 1):
+                    if cand_uid == uid_cover:
+                        rank = idx_rank
                         break
-                
+
                 if rank != -1:
-                    valid_count += 1
-                    ranks_list.append(rank)
-                    mrr_sum += 1.0 / rank
-                    if rank <= 5: top5_hits += 1
-                    if rank <= 10: top10_hits += 1
-                    lcs_list.append(true_sim)
-                    
-                    if true_sim > best_lcs:
-                        best_lcs, best_uid = true_sim, uid_cover
-                    
-                    correct_dtw = -1.0
-                    for comp in all_comparisons:
-                        if comp["cover_id"] == uid_cover and comp["original_id"] == uid_cover:
-                            if comp["dtw_distance"] != "":
-                                correct_dtw = comp["dtw_distance"]
+                    ranks.append(rank)
+                    mrrs.append(1.0 / rank)
+                    top5_hits.append(1 if rank <= 5 else 0)
+                    top10_hits.append(1 if rank <= 10 else 0)
+
+            avg_lcs = float(np.mean(lcs_sims)) if lcs_sims else 0.0
+            avg_mr = float(np.mean(ranks)) if ranks else 0.0
+            avg_mrr = float(np.mean(mrrs)) if mrrs else 0.0
+            avg_mdr = float(np.median(ranks)) if ranks else 0.0
+            avg_map = float(np.mean(mrrs)) if mrrs else 0.0  # MAP for single target = MRR
+            avg_top5 = float(np.mean(top5_hits)) if top5_hits else 0.0
+            avg_top10 = float(np.mean(top10_hits)) if top10_hits else 0.0
+
+            # Evaluate optimal binary classification threshold & confusion matrix for this hyperparameter combo
+            best_thresh, best_metrics, _ = evaluate_binary_classification(pairwise_lcs, "LCS")
+
+            combo_metrics[combo] = {
+                "lcs": avg_lcs,
+                "mr": avg_mr,
+                "mrr": avg_mrr,
+                "mdr": avg_mdr,
+                "map": avg_map,
+                "top5": avg_top5,
+                "top10": avg_top10,
+                "thresh": best_thresh,
+                "f1": best_metrics.get("f1_score", 0.0) if best_metrics else 0.0,
+                "precision": best_metrics.get("precision", 0.0) if best_metrics else 0.0,
+                "recall": best_metrics.get("recall", 0.0) if best_metrics else 0.0,
+                "fpr": best_metrics.get("fpr", 0.0) if best_metrics else 0.0,
+                "fnr": best_metrics.get("fnr", 0.0) if best_metrics else 0.0,
+                "tp": best_metrics.get("tp", 0) if best_metrics else 0,
+                "fp": best_metrics.get("fp", 0) if best_metrics else 0,
+                "fn": best_metrics.get("fn", 0) if best_metrics else 0,
+                "tn": best_metrics.get("tn", 0) if best_metrics else 0,
+                "accuracy": best_metrics.get("accuracy", 0.0) if best_metrics else 0.0
+            }
+
+            if combo_idx % 10 == 0 or combo_idx == len(grid_combinations):
+                print(f"    Evaluated {combo_idx}/{len(grid_combinations)} combinations -> Latest (L={r}, σ={k}, τ_pk={pk:.2f}): MRR={avg_mrr*100:.2f}%, MAP={avg_map*100:.2f}%, MR={avg_mr:.2f}, MDR={avg_mdr:.1f}, Top-5={avg_top5*100:.2f}%, Top-10={avg_top10*100:.2f}% | F1={combo_metrics[combo]['f1']:.4f}")
+
+        # Write Phase 2 results into organized CSV files
+        all_combos_results = []
+        summary_path = output_dir / "summary_parametros_empiricos.csv"
+        detailed_csv_path = output_dir / f"experimentos_parametros_empiricos_{method}_{dataset_dir.name}.csv"
+        detailed_csv_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(detailed_csv_path, 'w', encoding='utf-8') as f_det:
+            f_det.write("combo_id,method,dataset,pairs,checkerboard_radius_L,kernel_sigma,peak_threshold,tail_proportion_y,slope_epsilon,energy_tau,avg_lcs,mr,mdr,mrr,mrr_pct,map_pct,top5_prec,top10_prec,threshold,f1_score,precision,recall,fpr,fnr,tp,fp,fn,tn,accuracy\n")
+            for combo_idx, (combo, m) in enumerate(combo_metrics.items(), 1):
+                r, k, pk, tl, se, et = combo
+                avg_lcs = m["lcs"]
+                avg_mr = m["mr"]
+                avg_mrr = m["mrr"]
+                avg_mdr = m["mdr"]
+                avg_map = m["map"]
+                top5_prec = m["top5"]
+                top10_prec = m["top10"]
+                th = m["thresh"]
+                f1 = m["f1"]
+                prec = m["precision"]
+                rec = m["recall"]
+                fpr = m["fpr"]
+                fnr = m["fnr"]
+                tp = m["tp"]
+                fp = m["fp"]
+                fn = m["fn"]
+                tn = m["tn"]
+                acc = m["accuracy"]
+
+                with open(summary_path, 'a', encoding='utf-8') as f_sum:
+                    f_sum.write(f"{method},{n_valid},{avg_lcs:.4f},{avg_mr:.2f},{avg_mrr:.4f},{avg_mdr:.1f},{avg_map:.4f},{top5_prec:.4f},{top10_prec:.4f},{th:.4f},{f1:.4f},{prec:.4f},{rec:.4f},{fpr:.4f},{fnr:.4f},{tp},{fp},{fn},{tn},{acc:.4f},{r},{k},{pk:.2f},{tl:.2f},{se:.2f},{et:.2f}\n")
+                
+                f_det.write(f"{combo_idx},{method},{dataset_dir.name},{n_valid},{r},{k},{pk:.2f},{tl:.2f},{se:.2f},{et:.2f},{avg_lcs:.4f},{avg_mr:.2f},{avg_mdr:.1f},{avg_mrr:.4f},{avg_mrr*100:.2f},{avg_map*100:.2f},{top5_prec:.4f},{top10_prec:.4f},{th:.4f},{f1:.4f},{prec:.4f},{rec:.4f},{fpr:.4f},{fnr:.4f},{tp},{fp},{fn},{tn},{acc:.4f}\n")
+                all_combos_results.append((avg_lcs, avg_mr, avg_mdr, avg_mrr, avg_map, top5_prec, top10_prec, th, f1, prec, rec, fpr, fnr, tp, fp, fn, tn, acc))
+
+        mean_lcs = float(np.mean([res[0] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_mr = float(np.mean([res[1] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_mdr = float(np.median([res[2] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_mrr = float(np.mean([res[3] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_map = float(np.mean([res[4] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_top5 = float(np.mean([res[5] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_top10 = float(np.mean([res[6] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_th = float(np.mean([res[7] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_f1 = float(np.mean([res[8] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_prec = float(np.mean([res[9] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_rec = float(np.mean([res[10] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_fpr = float(np.mean([res[11] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_fnr = float(np.mean([res[12] for res in all_combos_results])) if all_combos_results else 0.0
+        mean_tp = int(round(np.mean([res[13] for res in all_combos_results]))) if all_combos_results else 0
+        mean_fp = int(round(np.mean([res[14] for res in all_combos_results]))) if all_combos_results else 0
+        mean_fn = int(round(np.mean([res[15] for res in all_combos_results]))) if all_combos_results else 0
+        mean_tn = int(round(np.mean([res[16] for res in all_combos_results]))) if all_combos_results else 0
+        mean_acc = float(np.mean([res[17] for res in all_combos_results])) if all_combos_results else 0.0
+
+        print(f"\n  [{method.upper()}] Experiments finished. Results saved to CSV: {detailed_csv_path}")
+        print(f"\n  === TABLA 1: RANKING Y COBERTURA ({method.upper()}) ===")
+        print(f"  {'Dataset':<15} | {'Method':<12} | {'MRR (%)':<10} | {'MAP (%)':<10} | {'MR':<8} | {'MDR':<8} | {'Top-5 (%)':<10} | {'Top-10 (%)':<10}")
+        print(f"  {'-'*95}")
+        print(f"  {dataset_dir.name:<15} | {method.upper():<12} | {mean_mrr*100:<10.2f} | {mean_map*100:<10.2f} | {mean_mr:<8.2f} | {mean_mdr:<8.1f} | {mean_top5*100:<10.2f} | {mean_top10*100:<10.2f}")
+
+        print(f"\n  === TABLA 2: CLASIFICACIÓN BINARIA ({method.upper()}) ===")
+        print(f"  {'Dataset':<15} | {'Method':<12} | {'Threshold':<11} | {'F1-Score':<10} | {'Precision (%)':<14} | {'Recall (%)':<12} | {'FPR (%)':<9} | {'FNR (%)':<9}")
+        print(f"  {'-'*105}")
+        print(f"  {dataset_dir.name:<15} | {method.upper():<12} | {mean_th:<11.4f} | {mean_f1:<10.4f} | {mean_prec*100:<14.2f} | {mean_rec*100:<12.2f} | {mean_fpr*100:<9.2f} | {mean_fnr*100:<9.2f}")
+
+        print(f"\n  === MATRICES DE CONFUSIÓN ({method.upper()}) ===")
+        print(f"  {'Dataset':<15} | {'Method':<12} | {'Threshold':<11} | {'TP':<8} | {'FP':<8} | {'FN':<8} | {'TN':<8} | {'Accuracy (%)':<13}")
+        print(f"  {'-'*100}")
+        print(f"  {dataset_dir.name:<15} | {method.upper():<12} | {mean_th:<11.4f} | {mean_tp:<8d} | {mean_fp:<8d} | {mean_fn:<8d} | {mean_tn:<8d} | {mean_acc*100:<13.2f}")
+
+    print("\nCustom Parameter Experiments Completed Successfully!")
+
+
+def main():
+    available_methods = [
+        'tesis', 'all',
+        'pyin', 'yin', 'crepe', 'rmvpe', 'spice', 'jdc', 'fcn_f0',
+        'melodia', 'tachibana', 'poliner', 'durrieu', 'basic_pitch',
+        'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
+        'bs_roformer', 'demucs', 'ensemble'
+    ]
+    parser = argparse.ArgumentParser(description="MC-MSA Empirical Parameters Experiment Runner.")
+    parser.add_argument("--method", type=str, default="tesis",
+                        choices=available_methods,
+                        help="Extraction method or group to evaluate")
+    parser.add_argument("--dataset_dir", type=str, default=None,
+                        help="Base directory of the dataset")
+    parser.add_argument("--orig_subdir", type=str, default="originales",
+                        help="Subdirectory of original songs")
+    parser.add_argument("--cover_subdir", type=str, default="covers",
+                        help="Subdirectory of cover songs")
+    parser.add_argument("--output_dir", type=str, default="resultados_parametros_empiricos",
+                        help="Output directory")
+    parser.add_argument("--cache_dir", type=str, default="cache",
+                        help="Directory for JSON analysis cache")
+    parser.add_argument("--match_mode", type=str, default="fuzzy",
+                        choices=["id", "stem", "fuzzy"],
+                        help="Match method")
+    
+    # Empirical Parameter Ranges/Fluctuations
+    parser.add_argument("--radii", nargs="+", type=int, default=DEFAULT_RADII,
+                        help="L: Radii range of the 2D Gaussian checkerboard kernel")
+    parser.add_argument("--kernel_sizes", nargs="+", type=int, default=DEFAULT_KERNEL_SIZES,
+                        help="σ: Standard deviation range for 1D Gaussian smoothing (starts at 2)")
+    parser.add_argument("--peak_thresholds", nargs="+", type=float, default=DEFAULT_PEAK_THRESHOLDS,
+                        help="τpeak: Minimum peak height threshold range (0 to 1)")
+    parser.add_argument("--tail_proportions", nargs="+", type=float, default=DEFAULT_TAIL_PROPORTIONS,
+                        help="y: Tail proportion of non-extreme notes (starts at 0.10)")
+    parser.add_argument("--slope_epsilons", nargs="+", type=float, default=DEFAULT_SLOPE_EPSILONS,
+                        help="εslope: Slope threshold for flat contour classification")
+    parser.add_argument("--energy_taus", nargs="+", type=float, default=DEFAULT_ENERGY_TAUS,
+                        help="τE: List of energy thresholds to evaluate")
+    parser.add_argument("--phase", type=str, default="both",
+                        choices=["0", "1", "2", "both", "all_phases"],
+                        help="Execution Phase: '0' (F0/Audio extraction only), '1' (SSM calculation to cache), '2' (Experiments only), 'both'/'all_phases' (All phases)")
+    parser.add_argument("--max_grid_evals", type=int, default=0,
+                        help="Maximum grid evaluation samples per method to limit execution time (0 for full 15,625 grid sweep)")
+    parser.add_argument("--filter_type", type=str, choices=["gaussian", "median", "hybrid"], default="gaussian",
+                        help="Type of smoothing filter on Novelty curve: 'gaussian', 'median', or 'hybrid'")
+    
+    args = parser.parse_args()
+
+    base_dir = Path(__file__).parent.absolute()
+
+    if args.dataset_dir is None:
+        datasets = find_available_datasets(base_dir)
+        if not datasets:
+            manual = input("Please enter the path or name of the dataset to use: ").strip()
+            args.dataset_dir = manual
+        else:
+            print("\n=== Dataset Selection (MC-MSA Empirical Parameters) ===")
+            for i, d in enumerate(datasets, 1):
+                print(f"{i}. {d}")
+            print(f"{len(datasets) + 1}. [Process ALL datasets]")
+            
+            while True:
+                choice = input(f"\nSelect a dataset (1-{len(datasets) + 1}): ").strip()
+                try:
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(datasets):
+                        args.dataset_dir = datasets[idx]
+                        break
+                    elif idx == len(datasets):
+                        args.dataset_dir = "all"
+                        break
+                except ValueError:
+                    if choice in datasets:
+                        args.dataset_dir = choice
+                        break
+
+            # Interactive prompt to select Phase
+            print("\n=== Execution Phase Selection ===")
+            print("0. Phase 0 only: Pure F0/Melody Extraction from Audio -> JSON Cache")
+            print("1. Phase 1 only: SSM Matrix Pre-calculation -> .ssm.npy Cache")
+            print("2. Phase 2 only: Experiments and Grid Search (using existing Cache)")
+            print("3. Phases 0, 1, and 2 (Full consecutive execution)")
+            
+            phase_choice = input("\nSelect Phase (0-3) [Default 3]: ").strip()
+            if phase_choice == "0":
+                args.phase = "0"
+            elif phase_choice == "1":
+                args.phase = "1"
+            elif phase_choice == "2":
+                args.phase = "2"
+            else:
+                args.phase = "all_phases"
+
+            # Interactive prompt to select Method
+            print("\n=== Extraction Method Selection ===")
+            print("1. thesis (Main evaluation group: YIN, pYIN, Melodia, CREPE, RMVPE, Demucs, etc.)")
+            print("2. all (All 18 available extraction methods)")
+            print("3. Specify an individual method from list")
+            
+            m_choice = input("\nSelect option (1-3) [Default 1]: ").strip().lower()
+            if m_choice == "2" or m_choice == "all":
+                args.method = "all"
+            elif m_choice == "3":
+                f0_methods = ['pyin', 'yin', 'crepe', 'ensemble', 'rmvpe', 'spice', 'jdc', 'fcn_f0']
+                melody_methods = [
+                    'poliner', 'durrieu', 'tachibana', 'melodia', 'basic_pitch',
+                    'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
+                    'bs_roformer', 'demucs'
+                ]
+                idx_map = {}
+                curr_idx = 1
+                
+                print("\n--- F0 Extractors (Fundamental Frequency) ---")
+                for m in f0_methods:
+                    print(f"  {curr_idx:2d}. {m}")
+                    idx_map[curr_idx] = m
+                    curr_idx += 1
+
+                print("\n--- Melody Extractors ---")
+                for m in melody_methods:
+                    print(f"  {curr_idx:2d}. {m}")
+                    idx_map[curr_idx] = m
+                    curr_idx += 1
+                
+                while True:
+                    sel = input(f"\nSelect a method (1-{curr_idx-1}) or type name: ").strip().lower()
+                    if sel.isdigit():
+                        num = int(sel)
+                        if num in idx_map:
+                            args.method = idx_map[num]
                             break
-                    if correct_dtw >= 0:
-                        dtw_list.append(correct_dtw)
-                    
-                    id_label = f"ID {uid_cover:02d}" if isinstance(uid_cover, int) else f"ID {uid_cover}"
-                    detailed_results.append(f"{id_label} | LCS: {true_sim:.4f} | Rank: {rank:2d} | DTW: {correct_dtw:.4f}")
-            except Exception as e:
-                print(f"\nError processing cover {uid_cover} ({method}): {e}")
-            finally:
-                if 'res_cover' in locals():
-                    del res_cover
-                if i % 10 == 0:
-                    gc.collect()
-                    
-        # Save comparisons cache if there were changes
-        if comp_cache_changed:
-            try:
-                comp_cache_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(comp_cache_path, 'w', encoding='utf-8') as f:
-                    json.dump(comp_cache, f, indent=2)
-                print(f"\n  [Caché] Comparisons saved/updated at {comp_cache_path.name}")
-            except Exception as e:
-                print(f"\n  [Caché] Warning saving comparisons cache: {e}")
+                        else:
+                            print(f"Invalid option. Please enter a number between 1 and {curr_idx-1}.")
+                    elif sel in available_methods:
+                        args.method = sel
+                        break
+                    else:
+                        print(f"Method '{sel}' not recognized. Try again.")
+            else:
+                args.method = "tesis"
 
-        # Metrics summary
-        print(f"\n[{method}] Finished.")
-        avg_lcs = np.mean(lcs_list) if lcs_list else 0
-        mr = np.mean(ranks_list) if ranks_list else 0
-        mrr = mrr_sum / valid_count if valid_count else 0
-        mdr = np.median(ranks_list) if ranks_list else 0
-        map_val = np.mean([1.0 / r for r in ranks_list]) if ranks_list else 0
-        top5_prec = top5_hits / valid_count if valid_count else 0
-        top10_prec = top10_hits / valid_count if valid_count else 0
-        avg_dtw = np.mean(dtw_list) if dtw_list else 0
-        
-        print(f"[{method}] Results | LCS: {avg_lcs:.4f} | MR: {mr:.2f} | MRR: {mrr:.4f} | MDR: {mdr:.1f} | MAP: {map_val:.4f} | Top5: {top5_prec:.2%} | Top10: {top10_prec:.2%} | DTW: {avg_dtw:.4f}")
-        
-        # Evaluate binary classification and optimal thresholds
-        best_thresh_lcs, best_metrics_lcs, curves_lcs = evaluate_binary_classification(pairwise_lcs, "LCS")
-        best_thresh_lev, best_metrics_lev, curves_lev = evaluate_binary_classification(pairwise_lev, "Levenshtein")
-        best_thresh_ph, best_metrics_ph, curves_ph = evaluate_binary_classification(pairwise_pitch_hist, "Pitch Histogram")
-        best_thresh_dtw, best_metrics_dtw, curves_dtw = evaluate_binary_classification(pairwise_dtw, "DTW", lower_is_better=True)
-
-        # Export to CSV summary (including optimal binary classification metrics based on LCS)
-        thresh_val = best_thresh_lcs if best_metrics_lcs else 0.0
-        f1_val = best_metrics_lcs.get('f1_score', 0.0) if best_metrics_lcs else 0.0
-        prec_val = best_metrics_lcs.get('precision', 0.0) if best_metrics_lcs else 0.0
-        rec_val = best_metrics_lcs.get('recall', 0.0) if best_metrics_lcs else 0.0
-        fpr_val = best_metrics_lcs.get('fpr', 0.0) if best_metrics_lcs else 0.0
-        fnr_val = best_metrics_lcs.get('fnr', 0.0) if best_metrics_lcs else 0.0
-        tp_val = best_metrics_lcs.get('tp', 0) if best_metrics_lcs else 0
-        fp_val = best_metrics_lcs.get('fp', 0) if best_metrics_lcs else 0
-        fn_val = best_metrics_lcs.get('fn', 0) if best_metrics_lcs else 0
-        tn_val = best_metrics_lcs.get('tn', 0) if best_metrics_lcs else 0
-        acc_val = best_metrics_lcs.get('accuracy', 0.0) if best_metrics_lcs else 0.0
-
-        with open(summary_path, 'a') as f:
-            f.write(f"{method},{valid_count},{avg_lcs:.6f},{mr:.6f},{mrr:.6f},{mdr:.1f},{map_val:.6f},{top5_prec:.6f},{top10_prec:.6f},{avg_dtw:.6f},{thresh_val:.6f},{f1_val:.6f},{prec_val:.6f},{rec_val:.6f},{fpr_val:.6f},{fnr_val:.6f},{tp_val},{fp_val},{fn_val},{tn_val},{acc_val:.6f}\n")
-            
-        # Export all_comparisons.csv
-        comp_csv_path = out_method_dir / "all_comparisons.csv"
-        with open(comp_csv_path, 'w') as f:
-            f.write("cover_id,original_id,lcs_similarity,levenshtein_similarity,pitch_hist_similarity,dtw_distance,is_correct\n")
-            for comp in all_comparisons:
-                f.write(f"{comp['cover_id']},{comp['original_id']},{comp['lcs_similarity']:.6f},{comp['levenshtein_similarity']:.6f},{comp['pitch_hist_similarity']:.6f},{comp['dtw_distance']},{comp['is_correct']}\n")
-                
-        # Export threshold curves
-        for m_name, curves in [("lcs", curves_lcs), ("levenshtein", curves_lev), ("pitch_hist", curves_ph), ("dtw", curves_dtw)]:
-            if not curves: continue
-            curve_csv_path = out_method_dir / f"threshold_analysis_{m_name}.csv"
-            with open(curve_csv_path, 'w') as f:
-                f.write("threshold,tp,fp,fn,tn,precision,recall,f1_score,accuracy,fpr,fnr\n")
-                for c in curves:
-                    f.write(f"{c['threshold']:.4f},{c['tp']},{c['fp']},{c['fn']},{c['tn']},{c['precision']:.6f},{c['recall']:.6f},{c['f1_score']:.6f},{c['accuracy']:.6f},{c['fpr']:.6f},{c['fnr']:.6f}\n")
-        
-        # Export to Detailed TXT Report
-        report_path = out_method_dir / "detailed_report.txt"
-        with open(report_path, 'w') as f:
-            f.write(f"DETAILED REPORT - METHOD: {method}\n")
-            f.write("="*50 + "\n")
-            if best_uid is not None:
-                f.write(f"IMAGES GENERATED FOR THE BEST MATCH (LCS = {best_lcs:.4f}):\n")
-                f.write(f"  ID: {best_uid}\n")
-                f.write(f"  Original: {orig_files[best_uid].name}\n")
-                f.write(f"  Cover:    {cover_files[best_uid].name}\n")
-                f.write("="*50 + "\n")
-            f.write("\n".join(detailed_results) + "\n")
-            f.write("="*50 + "\n")
-            f.write(f"GENERAL SUMMARY:\n")
-            f.write(f"Pairs evaluated: {valid_count}\n")
-            f.write(f"Average LCS:    {avg_lcs:.4f}\n")
-            f.write(f"Mean Rank:      {mr:.4f}\n")
-            f.write(f"MRR:             {mrr:.4f}\n")
-            f.write(f"Median Rank:     {mdr:.1f}\n")
-            f.write(f"MAP:             {map_val:.4f}\n")
-            f.write(f"Top-5 Precision: {top5_prec:.2%}\n")
-            f.write(f"Top-10 Precision: {top10_prec:.2%}\n")
-            f.write(f"Average DTW:    {avg_dtw:.4f}\n")
-            f.write("="*50 + "\n")
-            f.write(f"BINARY CLASSIFICATION THRESHOLDS ANALYSIS (OPTIMIZING F1-SCORE):\n\n")
-            
-            for m_name, best_t, best_m in [
-                ("LCS (Longest Common Subsequence)", best_thresh_lcs, best_metrics_lcs),
-                ("Levenshtein (Edit Distance)", best_thresh_lev, best_metrics_lev),
-                ("Pitch Class Histogram (Chroma Cosine)", best_thresh_ph, best_metrics_ph),
-                ("DTW Distance (Optimal Path)", best_thresh_dtw, best_metrics_dtw)
-            ]:
-                f.write(f"--- Metric: {m_name} ---\n")
-                if best_m:
-                    f.write(f"  Optimal Threshold:  {best_t:.4f}\n")
-                    f.write(f"  F1-Score:       {best_m['f1_score']:.4f}\n")
-                    f.write(f"  Precision:      {best_m['precision']:.4f}\n")
-                    f.write(f"  Recall (Sens.): {best_m['recall']:.4f}\n")
-                    f.write(f"  Accuracy:       {best_m['accuracy']:.4f}\n")
-                    f.write(f"  Confusion Matrix:\n")
-                    f.write(f"    - TP (True Pos.):  {best_m['tp']}\n")
-                    f.write(f"    - FP (False Pos.): {best_m['fp']}\n")
-                    f.write(f"    - FN (False Neg.): {best_m['fn']}\n")
-                    f.write(f"    - TN (True Neg.):  {best_m['tn']}\n")
-                else:
-                    f.write(f"  Not enough data to evaluate.\n")
-                f.write("\n")
-            f.write("="*50 + "\n")
-
-        # Qualitative Plots for the absolute best match of this method
-        if best_uid is not None and args.plots:
-            print(f"\n[{method}] Generating final qualitative plots for Best Match (ID {best_uid}, LCS={best_lcs:.4f})...")
-            try:
-                # Import visualization utilities
-                from src.melody_analysis_v2.visualization import (
-                    plot_melspectrogram, plot_melody_contour, plot_melody_only,
-                    plot_energy_only, plot_melody_and_energy
-                )
-                
-                # Extract metadata
-                meta_orig = get_audio_metadata(orig_files[best_uid])
-                meta_cover = get_audio_metadata(cover_files[best_uid])
-                title_orig = f"{meta_orig[0]} ({meta_orig[1]})"
-                title_cover = f"{meta_cover[0]} ({meta_cover[1]})"
-                
-                # Process Original and Cover sequentially to save RAM
-                print(f"  Processing Original (ID {best_uid})...")
-                res_orig_best = analyzer.analyze_file(str(orig_files[best_uid]))
-                
-                # Novelty
-                plot_boundary_detection(res_orig_best, output_path=out_method_dir / "fig_novelty_orig.png", title=f"Boundary Detection (Original)\nSong: {title_orig}")
-                
-                # SSM
-                if res_orig_best.self_similarity is not None:
-                    plot_self_similarity(res_orig_best, output_path=out_method_dir / "fig_ssm_orig.png", title=f"SSM (Original)\nSong: {title_orig}")
-                
-                # Melodic contour
-                plot_melody_contour(res_orig_best, output_path=out_method_dir / "fig_contour_orig.png", title=f"Melodic Contour (Original)\nSong: {title_orig}")
-                
-                # Melodic contour only (no segments, no energy)
-                plot_melody_only(res_orig_best, output_path=out_method_dir / "fig_contour_only_orig.png", show_segments=False, title=f"Melodic Contour Only (Original)\nSong: {title_orig}")
-                
-                # Energy only
-                plot_energy_only(res_orig_best, output_path=out_method_dir / "fig_energy_only_orig.png", title=f"Normalized Energy Only (Original)\nSong: {title_orig}")
-                
-                # Contour and Energy (no segments)
-                plot_melody_and_energy(res_orig_best, output_path=out_method_dir / "fig_contour_and_energy_orig.png", title=f"Melodic Contour & Energy (Original)\nSong: {title_orig}")
-                
-                # Spectrogram and Mel-spectrogram Orig
-                try:
-                    audio_plot, sr_plot = librosa.load(orig_files[best_uid], sr=analyzer.sample_rate)
-                    plot_spectrogram_with_segments(audio_plot, sr_plot, res_orig_best, output_path=out_method_dir / "fig_spectrogram_orig.png", title=f"Spectrogram with Segments (Original)\nSong: {title_orig}")
-                    plot_melspectrogram(audio_plot, sr_plot, output_path=out_method_dir / "fig_melspectrogram_orig.png", title=f"Mel-spectrogram (Original)\nSong: {title_orig}")
-                    del audio_plot
-                except Exception as spec_err:
-                    print(f"  Warning plotting spectrogram/mel-spectrogram (orig): {spec_err}")
-                
-                plt.close('all')
-                
-                # Process Cover
-                print(f"  Processing Cover (ID {best_uid})...")
-                res_cover_best = analyzer.analyze_file(str(cover_files[best_uid]))
-                
-                # Novelty
-                plot_boundary_detection(res_cover_best, output_path=out_method_dir / "fig_novelty_cover.png", title=f"Boundary Detection (Cover)\nSong: {title_cover}")
-                
-                # SSM
-                if res_cover_best.self_similarity is not None:
-                    plot_self_similarity(res_cover_best, output_path=out_method_dir / "fig_ssm_cover.png", title=f"SSM (Cover)\nSong: {title_cover}")
-                
-                # Melodic contour
-                plot_melody_contour(res_cover_best, output_path=out_method_dir / "fig_contour_cover.png", title=f"Melodic Contour (Cover)\nSong: {title_cover}")
-                
-                # Melodic contour only (no segments, no energy)
-                plot_melody_only(res_cover_best, output_path=out_method_dir / "fig_contour_only_cover.png", show_segments=False, title=f"Melodic Contour Only (Cover)\nSong: {title_cover}")
-                
-                # Energy only
-                plot_energy_only(res_cover_best, output_path=out_method_dir / "fig_energy_only_cover.png", title=f"Normalized Energy Only (Cover)\nSong: {title_cover}")
-                
-                # Contour and Energy (no segments)
-                plot_melody_and_energy(res_cover_best, output_path=out_method_dir / "fig_contour_and_energy_cover.png", title=f"Melodic Contour & Energy (Cover)\nSong: {title_cover}")
-                
-                # Spectrogram and Mel-spectrogram Cover
-                try:
-                    audio_plot, sr_plot = librosa.load(cover_files[best_uid], sr=analyzer.sample_rate)
-                    plot_spectrogram_with_segments(audio_plot, sr_plot, res_cover_best, output_path=out_method_dir / "fig_spectrogram_cover.png", title=f"Spectrogram with Segments (Cover)\nSong: {title_cover}")
-                    plot_melspectrogram(audio_plot, sr_plot, output_path=out_method_dir / "fig_melspectrogram_cover.png", title=f"Mel-spectrogram (Cover)\nSong: {title_cover}")
-                    del audio_plot
-                except Exception as spec_err:
-                    print(f"  Warning plotting spectrogram/mel-spectrogram (cover): {spec_err}")
-                
-                plt.close('all')
-                
-                # Shared plots (Bands and Contour)
-                plot_caplin_bands(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_bands.png", meta_orig=meta_orig, meta_cover=meta_cover)
-                plot_caplin_contour(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_contour.png", meta_orig=meta_orig, meta_cover=meta_cover)
-                plot_contour_only_comparison(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_contour_only.png", meta_orig=meta_orig, meta_cover=meta_cover)
-                plot_energy_only_comparison(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_energy_only.png", meta_orig=meta_orig, meta_cover=meta_cover)
-                plot_melody_and_energy_comparison(res_orig_best, res_cover_best, out_method_dir / "fig_qualitative_contour_and_energy.png", meta_orig=meta_orig, meta_cover=meta_cover)
-                
-                # --- NEW: Export the 9 diagram steps for the Best Match ---
-                print(f"  Exporting 9 diagram steps for Best Match (ID {best_uid})...")
-                exporter_orig = DiagramExporter(out_method_dir / "diagrama_pasos_original")
-                exporter_orig.export_all(str(orig_files[best_uid]), method=method)
-                
-                exporter_cover = DiagramExporter(out_method_dir / "diagrama_pasos_cover")
-                exporter_cover.export_all(str(cover_files[best_uid]), method=method)
-                
-                print(f"  Final plots generated successfully in {out_method_dir}")
-                
-                # Cleanup
-                del res_orig_best, res_cover_best
-                gc.collect()
-            except Exception as plot_err:
-                print(f"  Error generating final plots: {plot_err}")
-            finally:
-                plt.close('all')
-                gc.collect()
-
-    # Save consolidated comparative table in the dataset folder
-    save_dataset_comparative_table(dataset_dir, output_dir)
-
-
-def run_mc_msa_execution(args, base_dir):
-    # Resolve shared base paths
     cache_dir = Path(args.cache_dir)
     if not cache_dir.is_absolute():
         cache_dir = base_dir / cache_dir
 
-    if args.method == 'all':
-        methods = [
-            'pyin', 'yin', 'crepe', 'ensemble', 'rmvpe', 'spice', 'fcn_f0',
-            'melodia', 'tachibana', 'poliner', 'durrieu', 'basic_pitch',
-            'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
-            'bs_roformer', 'demucs'
-        ]
-    elif args.method == 'all_f0':
-        methods = ['pyin', 'yin', 'crepe', 'ensemble', 'rmvpe', 'spice', 'jdc', 'fcn_f0']
-    elif args.method == 'all_melody':
-        methods = [
-            'poliner', 'durrieu', 'tachibana', 'melodia', 'basic_pitch',
-            'demucs_crepe', 'bs_roformer_rmvpe', 'bs_roformer_crepe', 'demucs_rmvpe',
-            'bs_roformer', 'demucs'
-        ]
-    elif args.method == 'tesis':
-        methods = ['yin', 'pyin', 'melodia', 'spice', 'crepe', 'rmvpe', 'fcn_f0', 'demucs_crepe', 'demucs']
-    else:
-        methods = [args.method]
-
-    # Optional cache clearing (CLI or interactive)
-    if args.clear_cache:
-        for m in methods:
-            method_cache_dir = cache_dir / m
-            if method_cache_dir.exists():
-                print(f"[Cache] Deleting existing cache files for method '{m}' in {method_cache_dir}...")
-                import shutil
-                shutil.rmtree(method_cache_dir)
-                print(f"[Cache] Deletion completed for '{m}'.")
-    else:
-        any_cache_exists = any((cache_dir / m).exists() and (cache_dir / m).is_dir() and any((cache_dir / m).iterdir()) for m in methods)
-        if any_cache_exists:
-            ans = input(f"\nDo you want to delete the existing cache for the methods to evaluate before starting? (y/n): ").strip().lower()
-            if ans in ['s', 'si', 'y', 'yes']:
-                for m in methods:
-                    method_cache_dir = cache_dir / m
-                    if method_cache_dir.exists():
-                        print(f"[Cache] Deleting cache files at {method_cache_dir}...")
-                        import shutil
-                        shutil.rmtree(method_cache_dir)
-                print("[Cache] Deletion completed.")
-
-    # Determine datasets to process
     if args.dataset_dir == "all":
-        datasets_to_process = []
-        datasets_names = find_available_datasets(base_dir)
-        for name in datasets_names:
-            path = Path(name)
-            if not path.is_absolute():
-                path = base_dir / path
-            datasets_to_process.append(path)
+        datasets = find_available_datasets(base_dir)
+        for d in datasets:
+            d_path = base_dir / d
+            run_custom_param_experiment(d_path, [args.method], args, base_dir, cache_dir)
     else:
-        path = Path(args.dataset_dir)
-        if not path.is_absolute():
-            path = base_dir / path
-        datasets_to_process = [path]
-
-    # Process selected datasets
-    for dataset_dir in datasets_to_process:
-        try:
-            run_single_dataset_mc_msa(dataset_dir, methods, args, base_dir, cache_dir)
-        except Exception as e:
-            print(f"\nError processing dataset '{dataset_dir.name}': {e}")
+        d_path = base_dir / args.dataset_dir
+        if not d_path.is_absolute():
+            d_path = base_dir / args.dataset_dir
+        run_custom_param_experiment(d_path, [args.method], args, base_dir, cache_dir)
 
 
 if __name__ == "__main__":
