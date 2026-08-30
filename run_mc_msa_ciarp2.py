@@ -305,25 +305,26 @@ def run_phase1_extraction(
             
             features = None
             
-            # 1. Check Phase 1 cache
-            if cache_p1_file.exists():
-                try:
-                    with open(cache_p1_file, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    features = MelodyFeatures.from_dict(data)
-                except Exception:
-                    pass
+            # Check multiple potential cache locations for pre-computed f0 features
+            possible_cache_paths = [
+                cache_p1_file,
+                legacy_file,
+                Path("cache") / method / f"{file_path.stem}.json",
+                Path("cache_ciarp") / method / f"{file_path.stem}.json",
+            ]
             
-            # 2. Fallback to cache_ciarp directory
-            if features is None and legacy_file.exists():
-                try:
-                    with open(legacy_file, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    features = MelodyFeatures.from_dict(data)
-                except Exception:
-                    pass
+            for c_path in possible_cache_paths:
+                if c_path.exists():
+                    try:
+                        with open(c_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        features = MelodyFeatures.from_dict(data)
+                        if features and len(features.times) > 0:
+                            break
+                    except Exception:
+                        pass
             
-            # 3. Extract features directly if not cached
+            # Extract features directly if not found in any cache
             if features is None:
                 print(f"   [FASE 1 CIARP2 - Extrayendo] {method} | {file_path.name}...")
                 target_sr = 16000 if method in ["rmvpe", "crepe", "bs_roformer_rmvpe", "demucs_rmvpe"] else analyzer.sample_rate
