@@ -1,18 +1,17 @@
 """
-MC-MSA CIARP 2026 Paper Benchmark Runner (3-Phase Architecture)
-================================================================
-Runs the Melody-Centered Music Structure Analysis (MC-MSA) pipeline strictly according
-to the specifications, parameters, and algorithms published in the CIARP 2026 paper.
+MC-MSA CIARP 2026 Benchmark Runner with Time & Frequency Aligned DTW (DTW-DFW)
+================================================================================
+Runs the Melody-Centered Music Structure Analysis (MC-MSA) pipeline with 
+Time & Frequency Aligned DTW (Dynamic Time and Frequency Warping / Key-Invariant DTW).
 
-Architecture (3 Phased Stages):
---------------------------------
-Phase 1: Feature Extraction (F0 Pitch, Hz Frequency & Energy Extraction -> Cache Phase 1)
-Phase 2: Representation & Matrix Generation (SSM / Segment State Sequences / DTW Matrices -> Cache Phase 2)
-Phase 3: Classification & Retrieval Reporting (Algorithm 1 / NLCS / MRR / Top-5 / Bootstrap CIs -> Cache Phase 3)
-
-Cache Management:
+Key Enhancements:
 -----------------
-Supports selective flushing of Phase 1, Phase 2, or Phase 3 caches individually or all at once.
+1. Time & Frequency Aligned DTW: Centered & Shift-Invariant DTW for both MIDI semitones & Hz.
+2. 3-Phase Modular Architecture:
+   - Phase 1: Feature Extraction (F0 & Energy -> cache_ciarp/phase1_f0/)
+   - Phase 2: Matrix & SSM Generation (Key-Invariant DTW & State Sequences -> cache_ciarp/phase2_matrices/)
+   - Phase 3: Classifier & Report Generation (LaTeX Table 2, Table 3, Summary -> outputs_ciarp/)
+3. Interactive & CLI Cache Management: Selective flushing of Phase 1, Phase 2, Phase 3, or all caches.
 """
 
 import os
@@ -58,7 +57,7 @@ def calculate_lcs_ciarp(seq1: List[str], seq2: List[str]) -> float:
     return float(prev[m]) / max(n, m)
 
 
-# CIARP 2026 Paper Calibrated Hyperparameters (Table 1 / Thesis Baseline)
+# CIARP 2026 Paper Calibrated Hyperparameters
 CIARP_VOICING_TAU = 0.5
 CIARP_DELTA_MS = 200
 CIARP_THETA_SLOPE = -2.0
@@ -107,14 +106,52 @@ def get_audio_files(directory_path: Path) -> Dict[str, Path]:
     return result
 
 
+def dynamic_frequency_warping(pitch1: np.ndarray, pitch2: np.ndarray) -> Tuple[np.ndarray, float]:
+    """
+    Implements Dynamic Frequency Warping (DFW, Matsumoto 1987 JASA).
+    Aligns pitch contours non-linearly along the frequency/pitch axis (dual of DTW).
+    """
+    if len(pitch1) == 0 or len(pitch2) == 0:
+        return pitch2, 999.0
+        
+    # 1. Frequency shift alignment (Median pitch centering)
+    med1 = float(np.median(pitch1))
+    med2 = float(np.median(pitch2))
+    p2_shifted = pitch2 - (med2 - med1)
+    
+    # 2. Dynamic programming cost matrix along frequency axis
+    N, M = len(pitch1), len(pitch2)
+    cost = np.abs(pitch1[:, None] - p2_shifted[None, :])
+    
+    try:
+        D, wp = librosa.sequence.dtw(C=cost)
+        dfw_pitch2 = np.zeros(N, dtype=float)
+        counts = np.zeros(N, dtype=float)
+        for p1_idx, p2_idx in wp:
+            dfw_pitch2[p1_idx] += p2_shifted[p2_idx]
+            counts[p1_idx] += 1.0
+        counts[counts == 0] = 1.0
+        dfw_pitch2 /= counts
+        dfw_cost = float(D[-1, -1] / len(wp))
+        return dfw_pitch2, dfw_cost
+    except Exception:
+        return p2_shifted, 999.0
+
+
 def compute_dtw_distance(pitch1: np.ndarray, pitch2: np.ndarray) -> Dict[str, float]:
-    """Calculates Exact DTW (librosa) & FastDTW in both MIDI semitones and Hz frequencies."""
+    """
+    Calculates Absolute DTW, Time-Frequency Aligned DTW, and 
+    Matsumoto 1987 Dynamic Frequency Warping (DFW + DTW) dual alignment.
+    """
     valid1 = pitch1[(pitch1 > 0) & (~np.isnan(pitch1))]
     valid2 = pitch2[(pitch2 > 0) & (~np.isnan(pitch2))]
     default_res = {
         "exact_norm": 999.0, "exact_raw": 999.0,
-        "fast_norm": 999.0, "fast_raw": 999.0,
-        "hz_exact_norm": 999.0, "hz_exact_raw": 999.0
+        "key_inv_exact_norm": 999.0, "key_inv_exact_raw": 999.0,
+        "dfw_dtw_norm": 999.0, "dfw_dtw_raw": 999.0,
+        "hz_exact_norm": 999.0, "hz_exact_raw": 999.0,
+        "hz_key_inv_norm": 999.0, "hz_key_inv_raw": 999.0,
+        "hz_dfw_dtw_norm": 999.0, "hz_dfw_dtw_raw": 999.0
     }
     if len(valid1) < 5 or len(valid2) < 5:
         return default_res
@@ -128,7 +165,7 @@ def compute_dtw_distance(pitch1: np.ndarray, pitch2: np.ndarray) -> Dict[str, fl
         
     res = dict(default_res)
     
-    # 1. Exact DTW on MIDI semitones
+    # 1. Exact Absolute DTW on MIDI semitones
     try:
         D, wp = librosa.sequence.dtw(valid1.reshape(1, -1), valid2.reshape(1, -1), metric='euclidean')
         res["exact_raw"] = float(D[-1, -1])
@@ -136,21 +173,45 @@ def compute_dtw_distance(pitch1: np.ndarray, pitch2: np.ndarray) -> Dict[str, fl
     except Exception:
         pass
 
-    # 2. FastDTW on MIDI semitones
+    # 2. Key-Invariant DTW on MIDI semitones (Time & Frequency Aligned via Mean-Centering)
     try:
-        distance, _ = fastdtw(valid1.reshape(-1, 1), valid2.reshape(-1, 1), dist=lambda x, y: abs(x[0] - y[0]))
-        res["fast_raw"] = float(distance)
-        res["fast_norm"] = float(distance / max(len(valid1), len(valid2)))
+        v1_centered = valid1 - np.mean(valid1)
+        v2_centered = valid2 - np.mean(valid2)
+        D_ki, wp_ki = librosa.sequence.dtw(v1_centered.reshape(1, -1), v2_centered.reshape(1, -1), metric='euclidean')
+        res["key_inv_exact_raw"] = float(D_ki[-1, -1])
+        res["key_inv_exact_norm"] = float(D_ki[-1, -1] / len(wp_ki))
     except Exception:
         pass
 
-    # 3. Exact DTW on Hz Frequencies f0
+    # 3. Matsumoto 1987 Dynamic Frequency Warping (DFW) + DTW Dual Alignment
+    try:
+        dfw_v2, dfw_cost = dynamic_frequency_warping(valid1, valid2)
+        D_dfw, wp_dfw = librosa.sequence.dtw(valid1.reshape(1, -1), dfw_v2.reshape(1, -1), metric='euclidean')
+        res["dfw_dtw_raw"] = float(D_dfw[-1, -1])
+        res["dfw_dtw_norm"] = float(D_dfw[-1, -1] / len(wp_dfw))
+    except Exception:
+        pass
+
+    # 4. Exact Absolute DTW on Hz Frequencies
     try:
         f0_1 = 440.0 * np.power(2.0, (valid1 - 69.0) / 12.0)
         f0_2 = 440.0 * np.power(2.0, (valid2 - 69.0) / 12.0)
         D_hz, wp_hz = librosa.sequence.dtw(f0_1.reshape(1, -1), f0_2.reshape(1, -1), metric='euclidean')
         res["hz_exact_raw"] = float(D_hz[-1, -1])
         res["hz_exact_norm"] = float(D_hz[-1, -1] / len(wp_hz))
+        
+        # Key-Invariant DTW on Hz Frequencies (Ratio / Mean-Centered in Hz)
+        f0_1_norm = f0_1 / np.mean(f0_1)
+        f0_2_norm = f0_2 / np.mean(f0_2)
+        D_hz_ki, wp_hz_ki = librosa.sequence.dtw(f0_1_norm.reshape(1, -1), f0_2_norm.reshape(1, -1), metric='euclidean')
+        res["hz_key_inv_raw"] = float(D_hz_ki[-1, -1])
+        res["hz_key_inv_norm"] = float(D_hz_ki[-1, -1] / len(wp_hz_ki))
+        
+        # Matsumoto DFW on Hz Frequencies
+        dfw_hz_2, _ = dynamic_frequency_warping(f0_1, f0_2)
+        D_hz_dfw, wp_hz_dfw = librosa.sequence.dtw(f0_1.reshape(1, -1), dfw_hz_2.reshape(1, -1), metric='euclidean')
+        res["hz_dfw_dtw_raw"] = float(D_hz_dfw[-1, -1])
+        res["hz_dfw_dtw_norm"] = float(D_hz_dfw[-1, -1] / len(wp_hz_dfw))
     except Exception:
         pass
 
@@ -203,9 +264,9 @@ def clear_cache_dir(target_dir: Path, description: str):
     """Safely removes a cache directory."""
     if target_dir.exists():
         shutil.rmtree(target_dir)
-        print(f" [CACHE FLUSH] Removed cache folder: {target_dir} ({description})")
+        print(f" [CACHE FLUSH CIARP] Removed cache folder: {target_dir} ({description})")
     else:
-        print(f" [CACHE INFO] Directory {target_dir} was already empty.")
+        print(f" [CACHE INFO CIARP] Directory {target_dir} was already empty.")
 
 
 # ==============================================================================
@@ -216,14 +277,14 @@ def run_phase1_extraction(
     all_files: Dict[str, Path],
     methods: List[str],
     base_cache_dir: Path,
-    legacy_cache_dir: Path = Path("cache")
+    legacy_cache_dir: Path = Path("cache_ciarp")
 ) -> Dict[Tuple[str, str], MelodyFeatures]:
     """
-    PHASE 1: Extracts pitch contours (f0), timestamps, and energy.
+    PHASE 1 CIARP: Extracts pitch contours (f0), timestamps, and energy.
     Saves results to cache_ciarp/phase1_f0/{method}/{filename}.json
     """
     print("\n" + "=" * 80)
-    print(" PHASE 1: Melody Feature Extraction & Caching (f0 Pitch)")
+    print(" PHASE 1 CIARP: F0 Pitch & Energy Extraction & Caching ")
     print("=" * 80)
     
     p1_dir = get_phase_cache_dirs(base_cache_dir)["phase1"]
@@ -235,7 +296,7 @@ def run_phase1_extraction(
         method_p1_dir = p1_dir / method
         method_p1_dir.mkdir(parents=True, exist_ok=True)
         
-        legacy_method_dir = legacy_cache_dir / ('ensemble' if method in ['pyin_crepe', 'crepe_pyin'] else method)
+        legacy_method_dir = legacy_cache_dir / "phase1_f0" / method
         analyzer = MelodyAnalyzer(extraction_method=method)
         
         for file_key, file_path in all_files.items():
@@ -244,27 +305,28 @@ def run_phase1_extraction(
             
             features = None
             
-            # 1. Check Phase 1 cache
-            if cache_p1_file.exists():
-                try:
-                    with open(cache_p1_file, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    features = MelodyFeatures.from_dict(data)
-                except Exception:
-                    pass
+            # Check multiple potential cache locations for pre-computed f0 features
+            possible_cache_paths = [
+                cache_p1_file,
+                legacy_file,
+                Path("cache") / method / f"{file_path.stem}.json",
+                Path("cache_ciarp2") / method / f"{file_path.stem}.json",
+            ]
             
-            # 2. Fallback to legacy cache directory
-            if features is None and legacy_file.exists():
-                try:
-                    with open(legacy_file, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    features = MelodyFeatures.from_dict(data)
-                except Exception:
-                    pass
+            for c_path in possible_cache_paths:
+                if c_path.exists():
+                    try:
+                        with open(c_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        features = MelodyFeatures.from_dict(data)
+                        if features and len(features.times) > 0:
+                            break
+                    except Exception:
+                        pass
             
-            # 3. Extract features directly if not cached
+            # Extract features directly if not found in any cache
             if features is None:
-                print(f"   [PHASE 1 - Extracting] {method} | {file_path.name}...")
+                print(f"   [PHASE 1 CIARP - Extracting] {method} | {file_path.name}...")
                 target_sr = 16000 if method in ["rmvpe", "crepe", "bs_roformer_rmvpe", "demucs_rmvpe"] else analyzer.sample_rate
                 audio, sr = librosa.load(str(file_path), sr=target_sr)
                 features = extract_melody_features(audio, sr, method=method, hop_length=analyzer.hop_length, label=file_path.name)
@@ -278,13 +340,13 @@ def run_phase1_extraction(
                 
             extracted_features[(method, file_key, file_path.stem)] = features
             
-        print(f" [PHASE 1 COMPLETED] Method: {METHOD_DISPLAY_NAMES.get(method, method)}")
+        print(f" [PHASE 1 COMPLETED CIARP] Method: {METHOD_DISPLAY_NAMES.get(method, method)}")
         
     return extracted_features
 
 
 # ==============================================================================
-# PHASE 2: REPRESENTATION & MATRIX GENERATION (SSM & DTW ALIGNMENTS)
+# PHASE 2: REPRESENTATION & MATRIX GENERATION (SSM & TIME-FREQ ALIGNED DTW)
 # ==============================================================================
 
 def run_phase2_matrix_generation(
@@ -296,12 +358,11 @@ def run_phase2_matrix_generation(
     classifier: MelodyClassifierThesis
 ) -> Dict[str, Any]:
     """
-    PHASE 2: Reads f0 from Phase 1, performs formal segmentation (SSM / Algorithm 1), and
-    computes DTW alignment matrices and pair-wise NLCS similarities.
-    Saves representations to cache_ciarp/phase2_matrices/{method}/{pair_key}.json
+    PHASE 2 CIARP: Reads f0 from Phase 1, performs formal segmentation (SSM / Algorithm 1),
+    and computes Dynamic Frequency Warping (DFW, Matsumoto 1987) & Time-Frequency Aligned DTW.
     """
     print("\n" + "=" * 80)
-    print(" PHASE 2: SSM Matrix Generation, Segmentation, and DTW Alignments")
+    print(" PHASE 2 CIARP: SSM Generation, Segmentation & Time-Frequency Aligned DTW")
     print("=" * 80)
     
     p1_dir = get_phase_cache_dirs(base_cache_dir)["phase1"]
@@ -311,7 +372,7 @@ def run_phase2_matrix_generation(
     phase2_data = {}
     
     for method in methods:
-        print(f"\n---> [PHASE 2] Processing Matrices and SSM for Method: {METHOD_DISPLAY_NAMES.get(method, method)}...")
+        print(f"\n---> [PHASE 2 CIARP] Processing Matrices & Aligned DTW for: {METHOD_DISPLAY_NAMES.get(method, method)}...")
         method_p2_dir = p2_dir / method
         method_p2_dir.mkdir(parents=True, exist_ok=True)
         
@@ -344,10 +405,30 @@ def run_phase2_matrix_generation(
             p1_orig_file = method_p1_dir / f"{orig_path.stem}.json"
             p1_cover_file = method_p1_dir / f"{cover_path.stem}.json"
             
-            with open(p1_orig_file, 'r', encoding='utf-8') as f:
-                feat_orig = MelodyFeatures.from_dict(json.load(f))
-            with open(p1_cover_file, 'r', encoding='utf-8') as f:
-                feat_cover = MelodyFeatures.from_dict(json.load(f))
+            feat_orig, feat_cover = None, None
+            if p1_orig_file.exists():
+                try:
+                    with open(p1_orig_file, 'r', encoding='utf-8') as f:
+                        feat_orig = MelodyFeatures.from_dict(json.load(f))
+                except Exception:
+                    feat_orig = None
+
+            if p1_cover_file.exists():
+                try:
+                    with open(p1_cover_file, 'r', encoding='utf-8') as f:
+                        feat_cover = MelodyFeatures.from_dict(json.load(f))
+                except Exception:
+                    feat_cover = None
+
+            if feat_orig is None or len(feat_orig.times) == 0:
+                target_sr = 16000 if method in ["rmvpe", "crepe", "bs_roformer_rmvpe", "demucs_rmvpe"] else analyzer.sample_rate
+                audio_o, sr_o = librosa.load(str(orig_path), sr=target_sr)
+                feat_orig = extract_melody_features(audio_o, sr_o, method=method, hop_length=analyzer.hop_length, label=orig_path.name)
+
+            if feat_cover is None or len(feat_cover.times) == 0:
+                target_sr = 16000 if method in ["rmvpe", "crepe", "bs_roformer_rmvpe", "demucs_rmvpe"] else analyzer.sample_rate
+                audio_c, sr_c = librosa.load(str(cover_path), sr=target_sr)
+                feat_cover = extract_melody_features(audio_c, sr_c, method=method, hop_length=analyzer.hop_length, label=cover_path.name)
                 
             # Perform SSM Segmentation & Algorithm 1 State Classification
             res_orig = analyzer.analyze_features(feat_orig)
@@ -356,6 +437,7 @@ def run_phase2_matrix_generation(
             seq_orig = [seg.label for seg in res_orig.segments]
             seq_cover = [seg.label for seg in res_cover.segments]
             
+            # Compute Time & Frequency Aligned DTW
             dtw_res = compute_dtw_distance(res_orig.features.pitch_midi, res_cover.features.pitch_midi)
             
             pair_sequences[key] = (seq_orig, seq_cover)
@@ -383,13 +465,13 @@ def run_phase2_matrix_generation(
             "pair_dtw_metrics": pair_dtw_metrics,
             "common_keys": common_keys
         }
-        print(f" [PHASE 2 COMPLETED] Matrices and SSM ready for {METHOD_DISPLAY_NAMES.get(method, method)}")
+        print(f" [PHASE 2 COMPLETED CIARP] Matrices and Time-Frequency Aligned DTW ready for {METHOD_DISPLAY_NAMES.get(method, method)}")
         
     return phase2_data
 
 
 # ==============================================================================
-# PHASE 3: CLASSIFICATION & BENCHMARK REPORTING
+# PHASE 3: CLASSIFICATION & BENCHMARK REPORTING (CIARP)
 # ==============================================================================
 
 def run_phase3_classification_reporting(
@@ -399,12 +481,11 @@ def run_phase3_classification_reporting(
     base_cache_dir: Path
 ) -> Dict[str, Any]:
     """
-    PHASE 3: Reads Phase 2 representations, evaluates the classifier
-    (MRR, Top-5, NLCS, Bootstrap CIs, Confusion Matrix Grid Search), and exports
-    the official result tables (LaTeX Table 2, Table 3, and text summary).
+    PHASE 3 CIARP: Generates formatted report tables comparing Absolute DTW,
+    Time-Frequency Aligned DTW, and Matsumoto DFW.
     """
     print("\n" + "=" * 80)
-    print(" PHASE 3: Classifier, Threshold Search, and CIARP Table Generation")
+    print(" PHASE 3 CIARP: Classifier Evaluation & DFW/DTW Report Generation")
     print("=" * 80)
     
     p3_dir = get_phase_cache_dirs(base_cache_dir)["phase3"]
@@ -414,7 +495,7 @@ def run_phase3_classification_reporting(
     benchmark_results = {}
     
     for method in methods:
-        print(f"\n---> [PHASE 3] Computing final metrics and CIs for: {METHOD_DISPLAY_NAMES.get(method, method)}...")
+        print(f"\n---> [PHASE 3 CIARP] Computing metrics for: {METHOD_DISPLAY_NAMES.get(method, method)}...")
         m_data = phase2_data[method]
         pair_sequences = m_data["pair_sequences"]
         pair_dtw_metrics = m_data["pair_dtw_metrics"]
@@ -422,11 +503,10 @@ def run_phase3_classification_reporting(
         
         nlcs_scores = []
         exact_dtw_norm_list = []
-        exact_dtw_raw_list = []
-        fast_dtw_norm_list = []
-        fast_dtw_raw_list = []
+        key_inv_dtw_norm_list = []
+        dfw_dtw_norm_list = []
         hz_exact_norm_list = []
-        hz_exact_raw_list = []
+        hz_dfw_dtw_norm_list = []
         reciprocal_ranks = []
         top5_hits = []
         
@@ -436,15 +516,16 @@ def run_phase3_classification_reporting(
             nlcs_scores.append(nlcs * 100.0)
             
             dtw_res = pair_dtw_metrics[key]
-            if dtw_res["exact_norm"] < 990:
+            if dtw_res.get("exact_norm", 999) < 990:
                 exact_dtw_norm_list.append(dtw_res["exact_norm"])
-                exact_dtw_raw_list.append(dtw_res["exact_raw"])
-            if dtw_res["fast_norm"] < 990:
-                fast_dtw_norm_list.append(dtw_res["fast_norm"])
-                fast_dtw_raw_list.append(dtw_res["fast_raw"])
-            if dtw_res["hz_exact_norm"] < 990:
+            if dtw_res.get("key_inv_exact_norm", 999) < 990:
+                key_inv_dtw_norm_list.append(dtw_res["key_inv_exact_norm"])
+            if dtw_res.get("dfw_dtw_norm", 999) < 990:
+                dfw_dtw_norm_list.append(dtw_res["dfw_dtw_norm"])
+            if dtw_res.get("hz_exact_norm", 999) < 990:
                 hz_exact_norm_list.append(dtw_res["hz_exact_norm"])
-                hz_exact_raw_list.append(dtw_res["hz_exact_raw"])
+            if dtw_res.get("hz_dfw_dtw_norm", 999) < 990:
+                hz_dfw_dtw_norm_list.append(dtw_res["hz_dfw_dtw_norm"])
 
         # Target cover retrieval ranking (Target Cover Last tie-breaking)
         for q_key in common_keys:
@@ -472,20 +553,19 @@ def run_phase3_classification_reporting(
         avg_top5 = float(np.mean(top5_hits)) * 100.0 if top5_hits else 0.0
         
         avg_exact_norm = float(np.mean(exact_dtw_norm_list)) if exact_dtw_norm_list else 0.0
-        avg_exact_raw = float(np.mean(exact_dtw_raw_list)) if exact_dtw_raw_list else 0.0
-        avg_fast_norm = float(np.mean(fast_dtw_norm_list)) if fast_dtw_norm_list else 0.0
-        avg_fast_raw = float(np.mean(fast_dtw_raw_list)) if fast_dtw_raw_list else 0.0
+        avg_key_inv_norm = float(np.mean(key_inv_dtw_norm_list)) if key_inv_dtw_norm_list else 0.0
+        avg_dfw_dtw_norm = float(np.mean(dfw_dtw_norm_list)) if dfw_dtw_norm_list else 0.0
         avg_hz_exact_norm = float(np.mean(hz_exact_norm_list)) if hz_exact_norm_list else 0.0
-        avg_hz_exact_raw = float(np.mean(hz_exact_raw_list)) if hz_exact_raw_list else 0.0
+        avg_hz_dfw_dtw_norm = float(np.mean(hz_dfw_dtw_norm_list)) if hz_dfw_dtw_norm_list else 0.0
 
         # Compute 95% Bootstrap Confidence Intervals (1000 resamples)
         nlcs_ci = compute_bootstrap_ci(nlcs_scores, n_bootstraps=1000)
         mrr_ci = compute_bootstrap_ci([r * 100.0 for r in reciprocal_ranks], n_bootstraps=1000)
         top5_ci = compute_bootstrap_ci([t * 100.0 for t in top5_hits], n_bootstraps=1000)
-        
-        exact_norm_ci = compute_bootstrap_ci(exact_dtw_norm_list, n_bootstraps=1000)
-        exact_raw_ci = compute_bootstrap_ci(exact_dtw_raw_list, n_bootstraps=1000)
-        hz_exact_norm_ci = compute_bootstrap_ci(hz_exact_norm_list, n_bootstraps=1000)
+        key_inv_ci = compute_bootstrap_ci(key_inv_dtw_norm_list, n_bootstraps=1000)
+        dfw_dtw_ci = compute_bootstrap_ci(dfw_dtw_norm_list, n_bootstraps=1000)
+        hz_exact_ci = compute_bootstrap_ci(hz_exact_norm_list, n_bootstraps=1000)
+        hz_dfw_ci = compute_bootstrap_ci(hz_dfw_dtw_norm_list, n_bootstraps=1000)
 
         # Binary Classification Grid Search (Table 3)
         pairwise_lcs = []
@@ -524,12 +604,15 @@ def run_phase3_classification_reporting(
             "mrr_ci95": mrr_ci,
             "top5_percent": avg_top5,
             "top5_ci95": top5_ci,
-            "exact_dtw_norm": avg_exact_norm,
-            "exact_dtw_norm_ci95": exact_norm_ci,
-            "exact_dtw_raw": avg_exact_raw,
+            "raw_dtw_norm": avg_exact_norm,
+            "key_inv_dtw_norm": avg_key_inv_norm,
+            "key_inv_dtw_norm_ci95": key_inv_ci,
+            "dfw_dtw_norm": avg_dfw_dtw_norm,
+            "dfw_dtw_norm_ci95": dfw_dtw_ci,
             "hz_dtw_norm": avg_hz_exact_norm,
-            "hz_dtw_norm_ci95": hz_exact_norm_ci,
-            "hz_dtw_raw": avg_hz_exact_raw,
+            "hz_dtw_norm_ci95": hz_exact_ci,
+            "hz_dfw_dtw_norm": avg_hz_dfw_dtw_norm,
+            "hz_dfw_dtw_norm_ci95": hz_dfw_ci,
             "num_pairs": len(nlcs_scores),
             "table3_metrics": best_metrics
         }
@@ -542,27 +625,28 @@ def run_phase3_classification_reporting(
 
     # Determine best values for bolding in Table 2
     best_nlcs_val = max(res['nlcs_percent'] for res in benchmark_results.values())
-    best_dtw_val = min(res['hz_dtw_norm'] for res in benchmark_results.values())
+    best_hz_dfw_val = min(res['hz_dfw_dtw_norm'] for res in benchmark_results.values())
     best_mrr_val = max(res['mrr_percent'] for res in benchmark_results.values())
     best_top5_val = max(res['top5_percent'] for res in benchmark_results.values())
 
     # Generate LaTeX Table 2
     latex_table2_path = output_dir / "ciarp_table2_results.tex"
     with open(latex_table2_path, "w", encoding="utf-8") as f:
-        f.write("% CIARP 2026 Table 2: CSI Performance Across Melodic Extraction Methods\n")
+        f.write("% CIARP Table 2: CSI Performance Across Melodic Extraction Methods (DTW-DFW)\n")
         f.write("\\begin{table}[h!]\n\\centering\n")
-        f.write("\\caption{CSI Performance Across Melodic Extraction Methods}\n")
+        f.write("\\caption{CSI Performance Across Melodic Extraction Methods.}\n")
         f.write("\\label{tab:ciarp_table2}\n")
         f.write("\\begin{tabular}{|l|c|c|c|c|}\n\\hline\n")
-        f.write("\\textbf{Method} & \\textbf{Avg. NLCS (\\%)} & \\textbf{DTW} & \\textbf{MRR (\\%)} & \\textbf{Top-5 (\\%)} \\\\\n\\hline\n")
+        f.write("\\textbf{Method} & \\textbf{Avg. NLCS (\\%)} & \\textbf{DTW-DFW} & \\textbf{MRR (\\%)} & \\textbf{Top-5 (\\%)} \\\\\n\\hline\n")
         for m, res in benchmark_results.items():
             disp = res['display_name']
             
             nlcs_val = res['nlcs_percent']
             nlcs_str = f"\\textbf{{{nlcs_val:.2f}}}" if abs(nlcs_val - best_nlcs_val) < 1e-4 else f"{nlcs_val:.2f}"
             
-            dtw_val = res['hz_dtw_norm']
-            dtw_str = f"\\textbf{{{dtw_val:.2f}}}" if abs(dtw_val - best_dtw_val) < 1e-4 else f"{dtw_val:.2f}"
+            dfw_val = res['hz_dfw_dtw_norm']
+            dfw_val_str = f"\\textbf{{{dfw_val:.2f}}}" if abs(dfw_val - best_hz_dfw_val) < 1e-4 else f"{dfw_val:.2f}"
+            dfw_str = f"{dfw_val_str} [{res['hz_dfw_dtw_norm_ci95'][0]:.1f}, {res['hz_dfw_dtw_norm_ci95'][1]:.1f}]"
             
             mrr_val = res['mrr_percent']
             mrr_val_str = f"\\textbf{{{mrr_val:.2f}}}" if abs(mrr_val - best_mrr_val) < 1e-4 else f"{mrr_val:.2f}"
@@ -572,13 +656,13 @@ def run_phase3_classification_reporting(
             top5_val_str = f"\\textbf{{{top5_val:.2f}}}" if abs(top5_val - best_top5_val) < 1e-4 else f"{top5_val:.2f}"
             top5_str = f"{top5_val_str} [{res['top5_ci95'][0]:.1f}, {res['top5_ci95'][1]:.1f}]"
             
-            f.write(f"{disp} & {nlcs_str} & {dtw_str} & {mrr_str} & {top5_str} \\\\\n")
+            f.write(f"{disp} & {nlcs_str} & {dfw_str} & {mrr_str} & {top5_str} \\\\\n")
         f.write("\\hline\n\\end{tabular}\n\\end{table}\n")
 
     # Generate LaTeX Table 3
     latex_table3_path = output_dir / "ciarp_table3_results.tex"
     with open(latex_table3_path, "w", encoding="utf-8") as f:
-        f.write("% CIARP 2026 Table 3: Binary classification threshold analysis and confusion matrix parameters\n")
+        f.write("% CIARP Table 3: Binary classification threshold analysis and confusion matrix parameters\n")
         f.write("\\begin{table}[h!]\n\\centering\n")
         f.write("\\caption{Binary classification threshold analysis and confusion matrix parameters.}\n")
         f.write("\\label{tab:ciarp_table3}\n")
@@ -599,29 +683,29 @@ def run_phase3_classification_reporting(
     # Save ASCII summary table
     txt_table_path = output_dir / "ciarp_summary_table.txt"
     lines = []
-    lines.append("=" * 140)
-    lines.append("CIARP 2026 BENCHMARK SUMMARY TABLE 2 (RETRIEVAL - DTW)")
-    lines.append("=" * 140)
-    lines.append(f"{'Method':<20} | {'Avg. NLCS (%) [95% CI]':<26} | {'DTW [95% CI]':<28} | {'MRR (%) [95% CI]':<22} | {'Top-5 (%) [95% CI]':<22}")
-    lines.append("-" * 140)
+    lines.append("=" * 135)
+    lines.append("CIARP BENCHMARK SUMMARY TABLE 2 (TIME & FREQUENCY ALIGNED DTW-DFW)")
+    lines.append("=" * 135)
+    lines.append(f"{'Method':<20} | {'Avg. NLCS (%) [95% CI]':<26} | {'DTW-DFW [95% CI]':<26} | {'MRR (%) [95% CI]':<22} | {'Top-5 (%) [95% CI]':<22}")
+    lines.append("-" * 135)
     for m, res in benchmark_results.items():
         disp = res['display_name']
         nlcs_s = f"{res['nlcs_percent']:.2f} [{res['nlcs_ci95'][0]:.1f}, {res['nlcs_ci95'][1]:.1f}]"
-        dtw_s = f"{res['hz_dtw_norm']:.2f} [{res['hz_dtw_norm_ci95'][0]:.1f}, {res['hz_dtw_norm_ci95'][1]:.1f}]"
+        dfw_s = f"{res['hz_dfw_dtw_norm']:.2f} [{res['hz_dfw_dtw_norm_ci95'][0]:.1f}, {res['hz_dfw_dtw_norm_ci95'][1]:.1f}]"
         mrr_s = f"{res['mrr_percent']:.2f} [{res['mrr_ci95'][0]:.1f}, {res['mrr_ci95'][1]:.1f}]"
         top5_s = f"{res['top5_percent']:.2f} [{res['top5_ci95'][0]:.1f}, {res['top5_ci95'][1]:.1f}]"
-        lines.append(f"{disp:<20} | {nlcs_s:<26} | {dtw_s:<28} | {mrr_s:<22} | {top5_s:<22}")
-    lines.append("=" * 140)
+        lines.append(f"{disp:<20} | {nlcs_s:<26} | {dfw_s:<26} | {mrr_s:<22} | {top5_s:<22}")
+    lines.append("=" * 135)
     
     lines.append("\n" + "=" * 95)
-    lines.append("CIARP 2026 BENCHMARK SUMMARY TABLE 3 (BINARY CLASSIFICATION)")
+    lines.append("CIARP BENCHMARK SUMMARY TABLE 3 (BINARY CLASSIFICATION)")
     lines.append("=" * 95)
     lines.append(f"{'Method':<20} | {'Opt. Thresh':<12} | {'F1-Score':<10} | {'Precision':<10} | {'Recall':<10} | {'TP':<6} | {'FP':<6} | {'FN':<6} | {'TN':<6}")
     lines.append("-" * 95)
     for m in methods:
         bm = benchmark_results[m].get("table3_metrics", {})
         if bm:
-            lines.append(f"{benchmark_results[m]['display_name']:<20} | {bm['thresh']:<12.4f} | {bm['f1']:<10.4f} | {bm['prec']:<10.4f} | {bm['rec']:<10.4f} | {bm['tp']} & {bm['fp']} & {bm['fn']} & {bm['tn']}")
+            lines.append(f"{benchmark_results[m]['display_name']:<20} | {bm['thresh']:<12.4f} | {bm['f1']:<10.4f} | {bm['prec']:<10.4f} | {bm['rec']:<10.4f} | {bm['tp']:<6} | {bm['fp']:<6} | {bm['fn']:<6} | {bm['tn']:<6}")
     lines.append("=" * 95)
 
     txt_table_content = "\n".join(lines) + "\n"
@@ -634,9 +718,9 @@ def run_phase3_classification_reporting(
         latex_t3_str = f.read()
 
     print(f"\n========================================================")
-    print(f" BENCHMARK COMPLETED - FINAL RESULT TABLES")
+    print(f" CIARP BENCHMARK COMPLETED - RESULT TABLES")
     print(f"========================================================\n")
-    print("--- LATEX TABLE 2 (RETRIEVAL PERFORMANCE) ---")
+    print("--- LATEX TABLE 2 (TIME-FREQUENCY ALIGNED DTW-DFW) ---")
     print(latex_t2_str)
     print("--- LATEX TABLE 3 (BINARY CLASSIFICATION ANALYSIS) ---")
     print(latex_t3_str)
@@ -652,15 +736,15 @@ def run_phase3_classification_reporting(
 
 
 # ==============================================================================
-# MAIN EXECUTOR WITH INTERACTIVE CACHE FLUSH MENU
+# MAIN EXECUTOR CIARP
 # ==============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="MC-MSA CIARP 2026 Paper Phased Benchmark Runner")
+    parser = argparse.ArgumentParser(description="MC-MSA CIARP Benchmark Runner (Time & Frequency Aligned DTW-DFW)")
     parser.add_argument("--orig-dir", type=str, default="dataset_OA/originales", help="Path to originals folder")
     parser.add_argument("--cover-dir", type=str, default="dataset_OA/covers", help="Path to covers folder")
     parser.add_argument("--output-dir", type=str, default="outputs_ciarp", help="Output directory")
-    parser.add_argument("--cache-dir", type=str, default="cache_ciarp", help="Path to 3-phase cache directory")
+    parser.add_argument("--cache-dir", type=str, default="cache_ciarp", help="Path to CIARP cache directory")
     parser.add_argument("--methods", nargs="+", default=CIARP_EVAL_METHODS, help="Extraction methods to evaluate")
     parser.add_argument("--phase", type=str, choices=["1", "2", "3", "all"], default="all", help="Phase to execute (1, 2, 3, or all)")
     
@@ -668,7 +752,7 @@ def main():
     parser.add_argument("--clear-phase2", action="store_true", help="Flush Phase 2 cache (SSM & DTW matrices)")
     parser.add_argument("--clear-phase3", action="store_true", help="Flush Phase 3 cache (Classification results)")
     parser.add_argument("--clear-all-cache", action="store_true", help="Flush ALL caches")
-    parser.add_argument("--interactive", action="store_true", help="Launch interactive menu for cache and phase selection")
+    parser.add_argument("--interactive", action="store_true", help="Launch interactive menu")
     
     args = parser.parse_args()
     
@@ -682,15 +766,15 @@ def main():
     
     if args.interactive:
         print("\n========================================================")
-        print(" MC-MSA CIARP 2026 - Phase Cache Options")
+        print(" MC-MSA CIARP (Time & Frequency Aligned DTW-DFW) - Cache Options")
         print("========================================================")
         print(" [1] Flush PHASE 1 Cache (F0 Feature Extraction)")
-        print(" [2] Flush PHASE 2 Cache (SSM Matrix & DTW Alignments)")
-        print(" [3] Flush PHASE 3 Cache (Classifier Results)")
-        print(" [4] Flush ALL Cache (Phases 1, 2, and 3)")
+        print(" [2] Flush PHASE 2 Cache (SSM & Aligned DTW Matrices)")
+        print(" [3] Flush PHASE 3 Cache (Results & CIARP Tables)")
+        print(" [4] Flush ALL CIARP Cache")
         print(" [5] Execute Phase 1 (F0 Extraction)")
-        print(" [6] Execute Phase 2 (SSM Matrix & Alignments)")
-        print(" [7] Execute Phase 3 (Classifier & Final Tables)")
+        print(" [6] Execute Phase 2 (SSM & Time-Frequency Aligned DTW)")
+        print(" [7] Execute Phase 3 (Classifier & CIARP Tables)")
         print(" [8] Execute FULL Pipeline (Phases 1 -> 2 -> 3)")
         print(" [0] Exit")
         print("========================================================")
@@ -700,7 +784,7 @@ def main():
             clear_cache_dir(phase_dirs["phase1"], "Phase 1: f0 pitch")
             return
         elif choice == "2":
-            clear_cache_dir(phase_dirs["phase2"], "Phase 2: SSM matrices")
+            clear_cache_dir(phase_dirs["phase2"], "Phase 2: SSM & DTW matrices")
             return
         elif choice == "3":
             clear_cache_dir(phase_dirs["phase3"], "Phase 3: Classifier")
@@ -720,13 +804,13 @@ def main():
             print("Exiting...")
             return
 
-    # Handle direct CLI cache clearing flags
+    # Handle CLI cache clearing flags
     if args.clear_all_cache:
         clear_cache_dir(base_cache_path, "ALL phases")
     if args.clear_phase1:
         clear_cache_dir(phase_dirs["phase1"], "Phase 1: f0 pitch")
     if args.clear_phase2:
-        clear_cache_dir(phase_dirs["phase2"], "Phase 2: SSM matrices")
+        clear_cache_dir(phase_dirs["phase2"], "Phase 2: SSM & DTW matrices")
     if args.clear_phase3:
         clear_cache_dir(phase_dirs["phase3"], "Phase 3: Classifier")
 
@@ -745,7 +829,7 @@ def main():
     if args.phase in ["1", "all"]:
         run_phase1_extraction(all_audio_files, args.methods, base_cache_path)
         if args.phase == "1":
-            print("\n[PHASE 1 COMPLETED] F0 features successfully saved to cache.")
+            print("\n[PHASE 1 COMPLETED CIARP] F0 features successfully saved to cache.")
             return
 
     # EXECUTE PHASE 2
@@ -753,7 +837,7 @@ def main():
     if args.phase in ["2", "3", "all"]:
         phase2_data = run_phase2_matrix_generation(common_keys, orig_files, cover_files, args.methods, base_cache_path, classifier)
         if args.phase == "2":
-            print("\n[PHASE 2 COMPLETED] SSM matrices and DTW alignments successfully saved to cache.")
+            print("\n[PHASE 2 COMPLETED CIARP] SSM matrices and Time-Frequency Aligned DTW successfully saved to cache.")
             return
 
     # EXECUTE PHASE 3

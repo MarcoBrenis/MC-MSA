@@ -405,10 +405,30 @@ def run_phase2_matrix_generation(
             p1_orig_file = method_p1_dir / f"{orig_path.stem}.json"
             p1_cover_file = method_p1_dir / f"{cover_path.stem}.json"
             
-            with open(p1_orig_file, 'r', encoding='utf-8') as f:
-                feat_orig = MelodyFeatures.from_dict(json.load(f))
-            with open(p1_cover_file, 'r', encoding='utf-8') as f:
-                feat_cover = MelodyFeatures.from_dict(json.load(f))
+            feat_orig, feat_cover = None, None
+            if p1_orig_file.exists():
+                try:
+                    with open(p1_orig_file, 'r', encoding='utf-8') as f:
+                        feat_orig = MelodyFeatures.from_dict(json.load(f))
+                except Exception:
+                    feat_orig = None
+
+            if p1_cover_file.exists():
+                try:
+                    with open(p1_cover_file, 'r', encoding='utf-8') as f:
+                        feat_cover = MelodyFeatures.from_dict(json.load(f))
+                except Exception:
+                    feat_cover = None
+
+            if feat_orig is None or len(feat_orig.times) == 0:
+                target_sr = 16000 if method in ["rmvpe", "crepe", "bs_roformer_rmvpe", "demucs_rmvpe"] else analyzer.sample_rate
+                audio_o, sr_o = librosa.load(str(orig_path), sr=target_sr)
+                feat_orig = extract_melody_features(audio_o, sr_o, method=method, hop_length=analyzer.hop_length, label=orig_path.name)
+
+            if feat_cover is None or len(feat_cover.times) == 0:
+                target_sr = 16000 if method in ["rmvpe", "crepe", "bs_roformer_rmvpe", "demucs_rmvpe"] else analyzer.sample_rate
+                audio_c, sr_c = librosa.load(str(cover_path), sr=target_sr)
+                feat_cover = extract_melody_features(audio_c, sr_c, method=method, hop_length=analyzer.hop_length, label=cover_path.name)
                 
             # Perform SSM Segmentation & Algorithm 1 State Classification
             res_orig = analyzer.analyze_features(feat_orig)
